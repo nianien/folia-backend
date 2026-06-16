@@ -1,0 +1,43 @@
+[database]
+path = "data/frontpage.sqlite"
+
+[network]
+timeout_seconds = 15
+user_agent = "FrontpagePipeline/0.1 (+private research prototype)"
+
+[dedupe]
+same_event_threshold = 0.42
+exact_content_threshold = 0.96
+lookback_hours = 48
+
+[extraction]
+min_text_chars = 400
+paywalled_domains = ["ft.com", "bloomberg.com", "caixin.com"]
+
+[model]
+# provider options: "heuristic", "openai", "claude", "gemini", "xinapi"
+provider = "heuristic"
+timeout_seconds = 60
+temperature = 0.2
+max_output_tokens = 3000
+
+[model.openai]
+model = "gpt-4.1-mini"
+api_key_env = "OPENAI_API_KEY"
+endpoint = "https://api.openai.com/v1/responses"
+
+[model.claude]
+model = "claude-3-5-haiku-latest"
+api_key_env = "ANTHROPIC_API_KEY"
+endpoint = "https://api.anthropic.com/v1/messages"
+
+[model.gemini]
+model = "gemini-1.5-flash"
+api_key_env = "GEMINI_API_KEY"
+endpoint = "https://generativelanguage.googleapis.com/v1beta"
+
+[model.xinapi]
+# Use an id returned by GET https://airouter.xincache.cn/v1/models.
+model = "deepseek-ai/DeepSeek-R1"
+api_key_env = "XIN_API_KEY"
+endpoint = "https://airouter.xincache.cn/v1/chat/completions"

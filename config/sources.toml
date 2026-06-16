@@ -1,0 +1,15 @@
+[[sources]]
+id = "python_blog"
+name = "Python Blog"
+url = "https://blog.python.org/feeds/posts/default"
+tier = "interest"
+category_hint = "tech"
+enabled = true
+
+[[sources]]
+id = "guardian_world"
+name = "Guardian World"
+url = "https://www.theguardian.com/world/rss"
+tier = "broadsheet"
+category_hint = "international"
+enabled = false
