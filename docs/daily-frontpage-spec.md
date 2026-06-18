@@ -7,6 +7,24 @@
 
 ---
 
+# Status vs spec(实现进度对照)
+
+| spec 区块 | 状态 | 说明 |
+|-----------|------|------|
+| 2.1/2.2 基座层(RSSHub+FreshRSS+Full-Text RSS) | ✅ 已落地 | `docker-compose.yml` + `config/freshrss/`,`docker compose up` 即起 |
+| 2.3 M1 fetcher(FreshRSS API 拉未读) | ✅ | `freshrss_client.py`,Google Reader API |
+| 2.3 M2 extractor(全文落库) | ✅ | 全文经 FreshRSS/Full-Text RSS 取回,`content_html` 落库 + `html_to_text` |
+| 2.3 M3 当日聚类(bge-m3 余弦 0.82) | ✅ | `embeddings.py` + `dedupe.py`;离线降级 Jaccard |
+| 单篇事实抽取 + 多源融合带引用 | ✅ | `facts.py` + `synthesizer.py` + `cluster_sources` 编号 |
+| 2.3 M3 跨日进展闸门 | ❌ 未建 | 需 `prior_cluster_id` + LLM 判断 |
+| 2.3 M4 scorer / M5 ranker / `layout` 表 | ❌ 未建 | 重要性排序、版面 |
+| 2.4 应用层(FastAPI 三页面/PWA/已读) | ❌ 未建 | 当前仅 `viewer.py` 本地调试视图 |
+| 2.x cron 调度 / MCP | ❌ 未建 | |
+
+详见 `data-pipeline-technical-design.md`。
+
+---
+
 # Part 1 · 产品方案
 
 ## 1.1 一句话定义

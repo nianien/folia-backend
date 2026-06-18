@@ -60,7 +60,11 @@ def synthesize_cluster(
     if not rows:
         return None, "none"
 
-    fact_packages = [json.loads(row["article_facts"]) for row in rows]
+    fact_packages = []
+    for row in rows:
+        package = json.loads(row["article_facts"])
+        package["source_no"] = row["source_no"]
+        fact_packages.append(package)
     title = clean_text(rows[0]["title"])
     if model_client is not None and model_client.enabled:
         sources = [

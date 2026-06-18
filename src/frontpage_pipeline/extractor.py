@@ -37,13 +37,8 @@ class ArticleTextParser(HTMLParser):
         return "\n\n".join(line for line in lines if line)
 
 
-def extract_text(html: str, fallback: str | None = None, min_chars: int = 400) -> tuple[str, str]:
+def html_to_text(content_html: str | None) -> str:
+    """Convert FreshRSS full-text content HTML to plain text. No fetching."""
     parser = ArticleTextParser()
-    parser.feed(html)
-    text = parser.text()
-    if len(text) >= min_chars:
-        return text, "ok"
-    fallback_text = clean_text(fallback)
-    if fallback_text:
-        return fallback_text, "fallback_summary"
-    return text, "failed"
+    parser.feed(content_html or "")
+    return parser.text()

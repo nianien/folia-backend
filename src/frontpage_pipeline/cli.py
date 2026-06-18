@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
 from pathlib import Path
 
-from .config import database_path, load_settings, load_sources
-from .crawler import crawl, is_paywalled
-from .db import connect, fetch_rows, init_db, insert_article, mark_source_result, sync_sources
+from .config import database_path, load_settings, load_source_map
+from .db import connect, fetch_rows, init_db, insert_article, upsert_source
 from .dedupe import assign_pending_articles
-from .extractor import extract_text
+from .extractor import html_to_text
 from .facts import facts_pending
-from .fetcher import fetch_source, parse_feed
+from .freshrss_client import FreshRSSClient, FreshRSSError, freshrss_item_to_article
 from .model_client import create_model_client
 from .synthesizer import synthesize_pending
+from .text import clean_text
 from .viewer import serve
 
 
@@ -24,7 +25,6 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-db")
     sub.add_parser("run-once")
-    sub.add_parser("crawl-pending")
     sub.add_parser("extract-pending")
     sub.add_parser("facts-pending")
     sub.add_parser("synthesize-pending")
@@ -34,7 +34,6 @@ def main(argv: list[str] | None = None) -> int:
     inspect = sub.add_parser("inspect-cluster")
     inspect.add_argument("cluster_id", type=int)
     fixture = sub.add_parser("ingest-fixture")
-    fixture.add_argument("source_id")
     fixture.add_argument("feed_path")
     args = parser.parse_args(argv)
 
@@ -46,9 +45,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "run-once":
         return run_once(conn, args.sources, settings)
-    if args.command == "crawl-pending":
-        print(f"crawled {crawl_pending(conn, settings)} articles")
-        return 0
     if args.command == "extract-pending":
         print(f"extracted {extract_pending(conn, settings)} articles")
         return 0
@@ -66,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         inspect_cluster(conn, args.cluster_id)
         return 0
     if args.command == "ingest-fixture":
-        return ingest_fixture(conn, args.sources, args.source_id, Path(args.feed_path), settings)
+        return ingest_fixture(conn, args.sources, Path(args.feed_path), settings)
     return 1
 
 
@@ -77,110 +73,70 @@ def open_database(settings: dict) -> sqlite3.Connection:
 
 
 def run_once(conn: sqlite3.Connection, sources_path: str, settings: dict) -> int:
-    sources = load_sources(sources_path)
-    sync_sources(conn, sources)
-    network = settings.get("network", {})
-    timeout = int(network.get("timeout_seconds", 15))
-    user_agent = network.get("user_agent", "FrontpagePipeline/0.1")
-    inserted = 0
-    for source in sources:
-        if not source.enabled:
-            continue
-        try:
-            articles = fetch_source(source, timeout, user_agent)
-        except RuntimeError as exc:
-            mark_source_result(conn, source.id, str(exc))
-            print(str(exc), file=sys.stderr)
-            continue
-        for article in articles:
-            if insert_article(conn, article):
-                inserted += 1
-        mark_source_result(conn, source.id)
+    source_map = load_source_map(sources_path)
+    try:
+        client = FreshRSSClient.from_settings(settings)
+        items = list(client.iter_unread())
+    except FreshRSSError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    inserted, inserted_ids = ingest_items(conn, items, source_map)
     print(f"inserted {inserted} articles")
-    print(f"crawled {crawl_pending(conn, settings)} articles")
+    if settings.get("freshrss", {}).get("mark_read"):
+        client.mark_read(inserted_ids)
     print(f"extracted {extract_pending(conn, settings)} articles")
-    threshold = float(settings.get("dedupe", {}).get("same_event_threshold", 0.42))
-    print(f"assigned {assign_pending_articles(conn, threshold)} articles to clusters")
+    print(f"assigned {assign_pending_articles(conn, settings)} articles to clusters")
     model_client = create_model_client(settings)
     print(f"generated facts for {facts_pending(conn, model_client)} articles")
     print(f"synthesized {synthesize_pending(conn, model_client)} clusters")
     return 0
 
 
-def ingest_fixture(
-    conn: sqlite3.Connection,
-    sources_path: str,
-    source_id: str,
-    feed_path: Path,
-    settings: dict,
-) -> int:
-    sources = load_sources(sources_path)
-    sync_sources(conn, sources)
-    source = next((item for item in sources if item.id == source_id), None)
-    if source is None:
-        print(f"unknown source: {source_id}", file=sys.stderr)
-        return 2
-    articles = parse_feed(feed_path.read_bytes(), source)
-    inserted = sum(1 for article in articles if insert_article(conn, article))
+def ingest_fixture(conn: sqlite3.Connection, sources_path: str, feed_path: Path, settings: dict) -> int:
+    source_map = load_source_map(sources_path)
+    payload = json.loads(feed_path.read_text(encoding="utf-8"))
+    items = payload.get("items", []) if isinstance(payload, dict) else payload
+    inserted, _ = ingest_items(conn, items, source_map)
     print(f"inserted {inserted} fixture articles")
-    threshold = float(settings.get("dedupe", {}).get("same_event_threshold", 0.42))
-    print(f"assigned {assign_pending_articles(conn, threshold)} articles to clusters")
+    print(f"extracted {extract_pending(conn, settings)} articles")
+    print(f"assigned {assign_pending_articles(conn, settings)} articles to clusters")
     return 0
 
 
-def crawl_pending(conn: sqlite3.Connection, settings: dict) -> int:
-    network = settings.get("network", {})
-    extraction = settings.get("extraction", {})
-    timeout = int(network.get("timeout_seconds", 15))
-    user_agent = network.get("user_agent", "FrontpagePipeline/0.1")
-    paywalled_domains = list(extraction.get("paywalled_domains", []))
-    rows = fetch_rows(
-        conn,
-        """
-        SELECT id, url
-        FROM articles
-        WHERE html IS NULL AND fetch_status IN ('pending', 'failed')
-        """,
-    )
-    changed = 0
-    for row in rows:
-        if is_paywalled(row["url"], paywalled_domains):
-            conn.execute("UPDATE articles SET fetch_status='skipped', extract_status='paywalled' WHERE id=?", (row["id"],))
-            changed += 1
+def ingest_items(conn: sqlite3.Connection, items: list, source_map) -> tuple[int, list[str]]:
+    inserted = 0
+    inserted_ids: list[str] = []
+    for item in items:
+        article = freshrss_item_to_article(item, source_map)
+        if article is None:
             continue
-        try:
-            html = crawl(row["url"], timeout, user_agent)
-        except Exception as exc:  # network failures must not stop the batch
-            conn.execute("UPDATE articles SET fetch_status='failed' WHERE id=?", (row["id"],))
-            print(f"crawl failed for {row['id']}: {exc}", file=sys.stderr)
-            continue
-        conn.execute("UPDATE articles SET html=?, fetch_status='ok' WHERE id=?", (html, row["id"]))
-        changed += 1
-    conn.commit()
-    return changed
+        upsert_source(conn, article.source_id, article.source_name, article.source_tier, article.category)
+        if insert_article(conn, article):
+            inserted += 1
+            if article.external_id:
+                inserted_ids.append(article.external_id)
+    return inserted, inserted_ids
 
 
 def extract_pending(conn: sqlite3.Connection, settings: dict) -> int:
-    min_chars = int(settings.get("extraction", {}).get("min_text_chars", 400))
     rows = fetch_rows(
         conn,
         """
-        SELECT id, html, summary
+        SELECT id, content_html, summary
         FROM articles
         WHERE extracted_text IS NULL
-          AND (
-            html IS NOT NULL
-            OR extract_status='paywalled'
-            OR (fetch_status='failed' AND summary IS NOT NULL)
-          )
         """,
     )
     changed = 0
     for row in rows:
-        if row["html"]:
-            text, status = extract_text(row["html"], row["summary"], min_chars=min_chars)
+        text = html_to_text(row["content_html"])
+        if text:
+            status = "ok"
+        elif clean_text(row["summary"]):
+            text, status = clean_text(row["summary"]), "fallback_summary"
         else:
-            text, status = row["summary"] or "", "fallback_summary"
+            text, status = "", "empty"
         conn.execute(
             "UPDATE articles SET extracted_text=?, extract_status=? WHERE id=?",
             (text, status, row["id"]),

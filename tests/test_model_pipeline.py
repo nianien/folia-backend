@@ -5,11 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from frontpage_pipeline.db import connect, init_db, insert_article, sync_sources
+from frontpage_pipeline.db import connect, init_db, insert_article
 from frontpage_pipeline.dedupe import assign_pending_articles
 from frontpage_pipeline.facts import facts_pending
-from frontpage_pipeline.models import FeedArticle, Source
+from frontpage_pipeline.models import FeedArticle
 from frontpage_pipeline.synthesizer import synthesize_pending
+
+
+JACCARD_SETTINGS = {"dedupe": {"jaccard_threshold": 0.2}, "embeddings": {"url": "http://127.0.0.1:1"}}
 
 
 class FakeModelClient:
@@ -40,8 +43,6 @@ class ModelPipelineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             conn = connect(Path(tmp) / "frontpage.sqlite")
             init_db(conn)
-            source = Source(id="sample", name="Sample", url="https://example.com/rss", tier="wire")
-            sync_sources(conn, [source])
             articles = [
                 FeedArticle("sample", "Sample", "wire", "Transit plan approved", "https://example.com/a", "a", None, "City council approved the transit plan."),
                 FeedArticle("sample", "Sample", "wire", "City council approves transit plan", "https://example.com/b", "b", None, "The transit plan has a projected cost of 2 billion dollars."),
@@ -50,7 +51,7 @@ class ModelPipelineTest(unittest.TestCase):
                 insert_article(conn, article)
             conn.execute("UPDATE articles SET extracted_text=summary, extract_status='fallback_summary'")
             conn.commit()
-            assign_pending_articles(conn, 0.2)
+            assign_pending_articles(conn, JACCARD_SETTINGS)
 
             client = FakeModelClient()
             self.assertEqual(facts_pending(conn, client), 2)

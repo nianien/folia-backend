@@ -55,7 +55,7 @@ def facts_pending(conn: sqlite3.Connection, model_client: ModelClient | None = N
             """
             SELECT a.id, a.title, a.source_name, a.extracted_text, cs.source_no
             FROM articles a
-            JOIN cluster_sources cs ON cs.article_id=a.id
+            LEFT JOIN cluster_sources cs ON cs.article_id=a.id
             WHERE a.extracted_text IS NOT NULL
               AND (a.article_facts IS NULL OR a.fact_status != 'ok')
             """
@@ -72,12 +72,13 @@ def facts_pending(conn: sqlite3.Connection, model_client: ModelClient | None = N
 
 
 def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None) -> dict:
+    source_no = row["source_no"] or 0
     if model_client is None or not model_client.enabled:
-        return extract_facts(row["extracted_text"], row["id"], row["source_no"], row["source_name"], row["title"])
+        return extract_facts(row["extracted_text"], row["id"], source_no, row["source_name"], row["title"])
 
     article = {
         "article_id": row["id"],
-        "source_no": row["source_no"],
+        "source_no": source_no,
         "source_name": row["source_name"],
         "title": row["title"],
         "text": row["extracted_text"],
@@ -86,12 +87,12 @@ def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None)
         raw = model_client.complete(FACT_SYSTEM_PROMPT, fact_user_prompt(article))
         facts = parse_json_object(raw)
         facts["article_id"] = row["id"]
-        facts["source_no"] = row["source_no"]
+        facts["source_no"] = source_no
         facts["source_name"] = row["source_name"]
         facts["title"] = row["title"]
         return normalize_fact_package(facts)
     except (ModelError, ValueError, TypeError, json.JSONDecodeError):
-        return extract_facts(row["extracted_text"], row["id"], row["source_no"], row["source_name"], row["title"])
+        return extract_facts(row["extracted_text"], row["id"], source_no, row["source_name"], row["title"])
 
 
 def parse_json_object(value: str) -> dict:

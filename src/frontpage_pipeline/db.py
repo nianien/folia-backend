@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Iterable
 
-from .models import FeedArticle, Source
+from .models import FeedArticle
 from .text import content_hash, normalize_url, stable_id
 
 
@@ -27,29 +26,32 @@ CREATE TABLE IF NOT EXISTS articles (
   source_id TEXT NOT NULL,
   source_name TEXT NOT NULL,
   source_tier TEXT,
+  category TEXT,
+  external_id TEXT,
   guid TEXT,
   url TEXT NOT NULL,
   canonical_url TEXT,
   title TEXT NOT NULL,
   summary TEXT,
+  content_html TEXT,
   published_at TEXT,
   fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  html TEXT,
   extracted_text TEXT,
   article_facts TEXT,
-  fetch_status TEXT NOT NULL DEFAULT 'pending',
   extract_status TEXT,
   fact_status TEXT,
   content_hash TEXT,
   cluster_id INTEGER,
   UNIQUE(source_id, guid),
-  UNIQUE(canonical_url)
+  UNIQUE(canonical_url),
+  UNIQUE(external_id)
 );
 
 CREATE TABLE IF NOT EXISTS clusters (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   representative_article_id TEXT,
   title TEXT,
+  centroid BLOB,
   source_count INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -94,34 +96,25 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def sync_sources(conn: sqlite3.Connection, sources: Iterable[Source]) -> None:
-    conn.executemany(
-        """
-        INSERT INTO sources (id, name, url, tier, category_hint, enabled)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          name=excluded.name,
-          url=excluded.url,
-          tier=excluded.tier,
-          category_hint=excluded.category_hint,
-          enabled=excluded.enabled
-        """,
-        [
-            (source.id, source.name, source.url, source.tier, source.category_hint, int(source.enabled))
-            for source in sources
-        ],
-    )
-    conn.commit()
-
-
-def mark_source_result(conn: sqlite3.Connection, source_id: str, error: str | None = None) -> None:
+def upsert_source(
+    conn: sqlite3.Connection,
+    source_id: str,
+    name: str,
+    tier: str,
+    category: str | None = None,
+) -> None:
+    """Register a FreshRSS feed observed during ingest, so the viewer can list it."""
     conn.execute(
         """
-        UPDATE sources
-        SET last_fetched_at=CURRENT_TIMESTAMP, last_error=?
-        WHERE id=?
+        INSERT INTO sources (id, name, url, tier, category_hint, enabled, last_fetched_at)
+        VALUES (?, ?, '', ?, ?, 1, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          name=excluded.name,
+          tier=excluded.tier,
+          category_hint=excluded.category_hint,
+          last_fetched_at=CURRENT_TIMESTAMP
         """,
-        (error, source_id),
+        (source_id, name, tier, category),
     )
     conn.commit()
 
@@ -134,21 +127,24 @@ def insert_article(conn: sqlite3.Connection, article: FeedArticle) -> str | None
         conn.execute(
             """
             INSERT INTO articles (
-              id, source_id, source_name, source_tier, guid, url, canonical_url,
-              title, summary, published_at, content_hash
+              id, source_id, source_name, source_tier, category, external_id, guid,
+              url, canonical_url, title, summary, content_html, published_at, content_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 article_id,
                 article.source_id,
                 article.source_name,
                 article.source_tier,
+                article.category,
+                article.external_id,
                 article.guid,
                 article.url,
                 canonical_url,
                 article.title,
                 article.summary,
+                article.content_html,
                 article.published_at,
                 digest,
             ),

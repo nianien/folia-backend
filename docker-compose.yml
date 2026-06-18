@@ -1,0 +1,51 @@
+# 基座层(零开发,现成开源组件):
+#   rsshub      给没有 RSS 的站造源(公众号/微博/晚点等)
+#   fulltextrss FiveFilters Full-Text RSS,全文抽取后端
+#   freshrss    订阅管理 + 拉取调度,暴露 Google Reader API;调用 fulltextrss 取全文
+#
+# pipeline 跑在宿主机,通过 http://localhost:8080/api/greader.php 读已经是全文的内容。
+# Ollama(bge-m3 embedding)在 macOS 本机跑,不入 compose:ollama pull bge-m3。
+
+services:
+  rsshub:
+    image: diygod/rsshub:latest
+    restart: unless-stopped
+    ports:
+      - "1200:1200"
+    environment:
+      NODE_ENV: production
+      CACHE_TYPE: memory
+    networks:
+      - frontpage_net
+
+  fulltextrss:
+    image: heussd/fivefilters-full-text-rss:latest
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    networks:
+      - frontpage_net
+
+  freshrss:
+    image: freshrss/freshrss:latest
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+      - fulltextrss
+    ports:
+      - "8080:80"
+    environment:
+      TZ: ${TZ:-Australia/Sydney}
+      # FreshRSS 内置拉取调度(分钟),错开整点
+      CRON_MIN: "3,33"
+    volumes:
+      - freshrss_data:/var/www/FreshRSS/data
+    networks:
+      - frontpage_net
+
+volumes:
+  freshrss_data:
+
+networks:
+  frontpage_net:
+    driver: bridge

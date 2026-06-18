@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  可复现的订阅清单。FreshRSS WebUI → 订阅管理 → 导入/导出 → 导入此文件。
+  每条 xmlUrl 都经 fulltextrss 全文抽取:http://fulltextrss/makefulltextfeed.php?url=<原feed>&max=20
+  (fulltextrss / rsshub 均为 compose 服务名,FreshRSS 同在 frontpage_net,容器内可达;无需公网)。
+  原始 feed 地址见各条 htmlUrl 旁注释;BBC/AP 等反爬站抽取可能退化为摘要。
+  导入后 sources.toml 的 [[sources]] 用 match=title 或 stream_id=feed/N 关联 tier/category。
+-->
+<opml version="2.0">
+  <head>
+    <title>Frontpage subscriptions</title>
+  </head>
+  <body>
+    <outline text="Wire" title="Wire">
+      <!-- 原 feed: https://feeds.apnews.com/rss/apf-topnews -->
+      <outline type="rss" text="AP News" title="AP News"
+               xmlUrl="http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Ffeeds.apnews.com%2Frss%2Fapf-topnews&amp;max=20" htmlUrl="https://apnews.com/"/>
+      <!-- 原 feed: https://www.reutersagency.com/feed/?best-topics=world&post_type=best (注:该地址已失效,需替换可用 Reuters 源) -->
+      <outline type="rss" text="Reuters World" title="Reuters World"
+               xmlUrl="http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fwww.reutersagency.com%2Ffeed%2F%3Fbest-topics%3Dworld%26post_type%3Dbest&amp;max=20" htmlUrl="https://www.reuters.com/"/>
+    </outline>
+    <outline text="Broadsheet" title="Broadsheet">
+      <!-- 原 feed: https://www.theguardian.com/world/rss -->
+      <outline type="rss" text="Guardian World" title="Guardian World"
+               xmlUrl="http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fwww.theguardian.com%2Fworld%2Frss&amp;max=20" htmlUrl="https://www.theguardian.com/world"/>
+      <!-- 原 feed: https://feeds.bbci.co.uk/news/world/rss.xml (注:BBC 反爬,全文抽取常退化为摘要) -->
+      <outline type="rss" text="BBC World" title="BBC World"
+               xmlUrl="http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml&amp;max=20" htmlUrl="https://www.bbc.com/news/world"/>
+    </outline>
+    <outline text="Interest" title="Interest">
+      <!-- 原 feed: https://hnrss.org/frontpage -->
+      <outline type="rss" text="Hacker News" title="Hacker News"
+               xmlUrl="http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fhnrss.org%2Ffrontpage&amp;max=20" htmlUrl="https://news.ycombinator.com/"/>
+    </outline>
+    <outline text="CN" title="CN">
+      <!-- RSSHub 造源示例:晚点 LatePost 公众号(具体路由见 https://docs.rsshub.app)。原 feed: http://rsshub:1200/latepost -->
+      <outline type="rss" text="LatePost" title="LatePost"
+               xmlUrl="http://fulltextrss/makefulltextfeed.php?url=http%3A%2F%2Frsshub%3A1200%2Flatepost&amp;max=20" htmlUrl="https://www.latepost.com/"/>
+    </outline>
+  </body>
+</opml>

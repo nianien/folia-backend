@@ -4,16 +4,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class Source:
-    id: str
-    name: str
-    url: str
-    tier: str
-    category_hint: str | None = None
-    enabled: bool = True
-
-
-@dataclass(frozen=True)
 class FeedArticle:
     source_id: str
     source_name: str
@@ -23,6 +13,9 @@ class FeedArticle:
     guid: str | None
     published_at: str | None
     summary: str | None
+    category: str | None = None
+    content_html: str | None = None
+    external_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +24,7 @@ class ArticleRecord:
     source_id: str
     source_name: str
     source_tier: str | None
+    category: str | None
     title: str
     url: str
     canonical_url: str | None

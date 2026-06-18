@@ -5,10 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from frontpage_pipeline.db import connect, init_db, insert_article, sync_sources
+from frontpage_pipeline.db import connect, init_db, insert_article, upsert_source
 from frontpage_pipeline.dedupe import assign_pending_articles
-from frontpage_pipeline.models import FeedArticle, Source
+from frontpage_pipeline.models import FeedArticle
 from frontpage_pipeline.viewer import route_request
+
+
+JACCARD_SETTINGS = {"dedupe": {"jaccard_threshold": 0.2}, "embeddings": {"url": "http://127.0.0.1:1"}}
 
 
 class ViewerTest(unittest.TestCase):
@@ -17,8 +20,7 @@ class ViewerTest(unittest.TestCase):
             database = Path(tmp) / "frontpage.sqlite"
             conn = connect(database)
             init_db(conn)
-            source = Source(id="sample", name="Sample News", url="https://example.com/rss", tier="wire")
-            sync_sources(conn, [source])
+            upsert_source(conn, "sample", "Sample News", "wire", "international")
             article_id = insert_article(
                 conn,
                 FeedArticle(
@@ -39,11 +41,10 @@ class ViewerTest(unittest.TestCase):
                 SET extracted_text=summary,
                     extract_status='fallback_summary',
                     article_facts='{"facts": [{"text": "The city council approved a transit plan.", "type": "core_fact"}]}',
-                    fact_status='ok',
-                    fetch_status='ok'
+                    fact_status='ok'
                 """
             )
-            assign_pending_articles(conn, 0.2)
+            assign_pending_articles(conn, JACCARD_SETTINGS)
             conn.execute(
                 """
                 UPDATE clusters
