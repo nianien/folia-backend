@@ -13,14 +13,30 @@ pipeline export -> data/frontpage.json -> loader.py -> Neon Postgres <- main.py 
 preserves `like_count`. Each load marks the table inactive then re-activates the
 current snapshot; the API only serves `active` rows.
 
-## Local run
+## Deploy (local container, DB stays on Neon)
+
+Runs via docker-compose. `DATABASE_URL` comes from `.env` (compose parses it
+literally, so the `&` in a Neon URL is safe — unlike shell `source .env`).
+
+```bash
+# 1) host: produce the snapshot (needs local SQLite + Ollama)
+PYTHONPATH=src python -m frontpage_pipeline.cli export      # -> data/frontpage.json
+
+# 2) load it into Neon (one-shot container)
+docker compose run --rm frontpage-loader
+
+# 3) serve the API
+docker compose up -d frontpage-api                          # http://localhost:8090
+```
+
+`scripts/publish.sh` chains steps 1–2 after a pipeline run.
+
+## Dev run (no container)
 
 ```bash
 python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt
-set -a; source .env; set +a            # provides DATABASE_URL
-
-PYTHONPATH=src python -m frontpage_pipeline.cli export   # -> data/frontpage.json
-backend/.venv/bin/python backend/loader.py               # create tables + load
+export DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"   # source-safe
+backend/.venv/bin/python backend/loader.py
 backend/.venv/bin/uvicorn main:app --app-dir backend --port 8090
 ```
 
