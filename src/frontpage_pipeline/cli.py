@@ -9,6 +9,7 @@ from pathlib import Path
 from .config import database_path, load_settings, load_source_map
 from .db import connect, fetch_rows, init_db, insert_article, upsert_source
 from .dedupe import assign_pending_articles
+from .export import write_frontpage
 from .extractor import html_to_text
 from .facts import facts_pending
 from .freshrss_client import FreshRSSClient, FreshRSSError, freshrss_item_to_article
@@ -31,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
+    export_parser = sub.add_parser("export")
+    export_parser.add_argument("--out", default="data/frontpage.json")
     inspect = sub.add_parser("inspect-cluster")
     inspect.add_argument("cluster_id", type=int)
     fixture = sub.add_parser("ingest-fixture")
@@ -53,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "synthesize-pending":
         print(f"synthesized {synthesize_pending(conn, create_model_client(settings))} clusters")
+        return 0
+    if args.command == "export":
+        count = write_frontpage(conn, Path(args.out))
+        print(f"exported {count} stories to {args.out}")
         return 0
     if args.command == "serve":
         conn.close()
