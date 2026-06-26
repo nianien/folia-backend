@@ -1,22 +1,20 @@
 #!/usr/bin/env bash
-# 把最新 pipeline 结果发布到 Neon:导出 frontpage.json,再用 compose 灌库。
-# 前提:已 run-once 生成数据;.env 里有 DATABASE_URL。
-# 用法:./scripts/publish.sh
+# 入库: 把最新聚合结果导出并写入 Postgres(Neon)。
+# 前提: 已 run-once 生成本地数据; .env 里有 DATABASE_URL; 已装本包(含 psycopg)。
+# 用法: ./scripts/publish.sh
 set -euo pipefail
-
-# OrbStack 的 docker CLI 不在默认 PATH
-export PATH="$HOME/.orbstack/bin:$PATH"
 
 cd "$(dirname "$0")/.."
 
-echo "==> 导出 frontpage.json(宿主机)"
-PYTHONPATH=src python -m frontpage_pipeline.cli export
+# .env 的 DATABASE_URL 含 & , 不能 source; 直接取值注入
+export DATABASE_URL="$(grep '^DATABASE_URL=' .env | head -1 | cut -d= -f2-)"
+export PYTHONPATH=src
 
-echo "==> 灌入 Neon(一次性容器)"
-docker compose run --rm frontpage-loader
+echo "==> 导出 frontpage.json"
+python -m folia.pipeline.cli export
 
-echo "==> 确保 API 常驻"
-docker compose up -d frontpage-api
+echo "==> 入库到 Neon"
+python -m folia.pipeline.cli load
 
 echo ""
-echo "完成。接口在 http://localhost:8090(/stories /search /story/{key})"
+echo "完成: 聚合数据已写入 Neon。"

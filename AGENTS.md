@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Python backend prototype. `src/frontpage_pipeline/` contains the editorial-layer pipeline package, `config/*.toml` contains runtime configuration, `config/freshrss/` holds base-layer wiring (OPML + setup notes), `docker-compose.yml` brings up the base layer (RSSHub + FreshRSS + FiveFilters Full-Text RSS), `docs/` contains product and technical design documents, `tests/` contains standard-library `unittest` coverage, and `data/` is reserved for local SQLite files.
+This repository is a Python backend prototype. `src/folia.pipeline/` contains the editorial-layer pipeline package, `config/*.toml` contains runtime configuration, `config/freshrss/` holds base-layer wiring (OPML + setup notes), `docker-compose.yml` brings up the base layer (RSSHub + FreshRSS + FiveFilters Full-Text RSS), `docs/` contains product and technical design documents, `tests/` contains standard-library `unittest` coverage, and `data/` is reserved for local SQLite files.
 
 The pipeline reads already-full-text articles from FreshRSS via the Google Reader API; it does not fetch web pages or parse RSS itself.
 
@@ -17,13 +17,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 # offline editorial layer against a recorded FreshRSS response:
-frontpage-pipeline init-db
-frontpage-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
+folia-pipeline init-db
+folia-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
 # full run (requires the docker-compose base layer up; see README):
-frontpage-pipeline run-once
+folia-pipeline run-once
 ```
 
-Without editable install, run commands with `PYTHONPATH=src`, for example `PYTHONPATH=src python -m frontpage_pipeline.cli init-db`.
+Without editable install, run commands with `PYTHONPATH=src`, for example `PYTHONPATH=src python -m folia.pipeline.cli init-db`.
 
 ## Coding Style & Naming Conventions
 

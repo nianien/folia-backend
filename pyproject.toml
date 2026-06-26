@@ -3,18 +3,17 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "frontpage-pipeline"
+name = "folia-pipeline"
 version = "0.1.0"
-description = "Data pipeline for the Frontpage private news prototype"
+description = "Folia data pipeline: crawl, clean, aggregate, and store news into Postgres"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "psycopg[binary]>=3.2.10",   # 入库: 写聚合结果到 Postgres(Neon)
+]
 
 [project.scripts]
-frontpage-pipeline = "frontpage_pipeline.cli:main"
+folia-pipeline = "folia.pipeline.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.frontpage]
-config_dir = "config"
-database_path = "data/frontpage.sqlite"
+include = ["folia*"]

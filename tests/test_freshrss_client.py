@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from frontpage_pipeline.config import SourceMap, SourceMeta
-from frontpage_pipeline.freshrss_client import (
+from folia.pipeline.config import SourceMap, SourceMeta
+from folia.pipeline.freshrss_client import (
     FreshRSSClient,
     FreshRSSConfig,
     freshrss_item_to_article,

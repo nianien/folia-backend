@@ -29,7 +29,7 @@ config/
   freshrss/
     subscriptions.opml      # 可复现订阅清单
     README.md               # 基座接线说明
-src/frontpage_pipeline/
+src/folia.pipeline/
   cli.py                    # CLI 入口
   config.py                 # 配置 + load_source_map
   freshrss_client.py        # FreshRSS Google Reader API 客户端
@@ -164,14 +164,14 @@ cluster 层 `synthesized_text` 为主产物:基于多源事实包生成的压缩
 ## 9. CLI 命令
 
 ```bash
-frontpage-pipeline init-db
-frontpage-pipeline run-once          # 从 FreshRSS 拉未读 -> 文本化 -> 聚类 -> 事实 -> 合成
-frontpage-pipeline extract-pending
-frontpage-pipeline facts-pending
-frontpage-pipeline synthesize-pending
-frontpage-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
-frontpage-pipeline inspect-cluster 1
-frontpage-pipeline serve --port 8000
+folia-pipeline init-db
+folia-pipeline run-once          # 从 FreshRSS 拉未读 -> 文本化 -> 聚类 -> 事实 -> 合成
+folia-pipeline extract-pending
+folia-pipeline facts-pending
+folia-pipeline synthesize-pending
+folia-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
+folia-pipeline inspect-cluster 1
+folia-pipeline serve --port 8000
 ```
 
 `run-once` 拉取依赖 FreshRSS 可达;`ingest-fixture` 吃录制的 Reader API JSON,离线可跑完整编辑层。

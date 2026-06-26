@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from frontpage_pipeline.config import SourceMap, SourceMeta
-from frontpage_pipeline.db import connect, init_db, insert_article
-from frontpage_pipeline.dedupe import assign_pending_articles
-from frontpage_pipeline.extractor import html_to_text
-from frontpage_pipeline.facts import facts_pending
-from frontpage_pipeline.freshrss_client import freshrss_item_to_article
-from frontpage_pipeline.synthesizer import synthesize_pending
+from folia.pipeline.config import SourceMap, SourceMeta
+from folia.pipeline.db import connect, init_db, insert_article
+from folia.pipeline.dedupe import assign_pending_articles
+from folia.pipeline.extractor import html_to_text
+from folia.pipeline.facts import facts_pending
+from folia.pipeline.freshrss_client import freshrss_item_to_article
+from folia.pipeline.synthesizer import synthesize_pending
 
 
 # No [embeddings] reachable -> is_available() returns False offline -> deterministic Jaccard.

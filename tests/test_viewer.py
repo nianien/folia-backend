@@ -5,10 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from frontpage_pipeline.db import connect, init_db, insert_article, upsert_source
-from frontpage_pipeline.dedupe import assign_pending_articles
-from frontpage_pipeline.models import FeedArticle
-from frontpage_pipeline.viewer import route_request
+from folia.pipeline.db import connect, init_db, insert_article, upsert_source
+from folia.pipeline.dedupe import assign_pending_articles
+from folia.pipeline.models import FeedArticle
+from folia.pipeline.viewer import route_request
 
 
 JACCARD_SETTINGS = {"dedupe": {"jaccard_threshold": 0.2}, "embeddings": {"url": "http://127.0.0.1:1"}}

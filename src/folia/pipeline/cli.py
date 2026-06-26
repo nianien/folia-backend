@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -9,18 +10,18 @@ from pathlib import Path
 from .config import database_path, load_settings, load_source_map
 from .db import connect, fetch_rows, init_db, insert_article, upsert_source
 from .dedupe import assign_pending_articles
-from .export import write_frontpage
 from .extractor import html_to_text
 from .facts import facts_pending
 from .freshrss_client import FreshRSSClient, FreshRSSError, freshrss_item_to_article
 from .model_client import create_model_client
+from .store.export import write_frontpage
 from .synthesizer import synthesize_pending
 from .text import clean_text
 from .viewer import serve
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="frontpage-pipeline")
+    parser = argparse.ArgumentParser(prog="folia-pipeline")
     parser.add_argument("--settings", default="config/settings.toml")
     parser.add_argument("--sources", default="config/sources.toml")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -34,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--port", type=int, default=8000)
     export_parser = sub.add_parser("export")
     export_parser.add_argument("--out", default="data/frontpage.json")
+    load_parser = sub.add_parser("load")
+    load_parser.add_argument("--in", dest="infile", default="data/frontpage.json")
     inspect = sub.add_parser("inspect-cluster")
     inspect.add_argument("cluster_id", type=int)
     fixture = sub.add_parser("ingest-fixture")
@@ -60,6 +63,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "export":
         count = write_frontpage(conn, Path(args.out))
         print(f"exported {count} stories to {args.out}")
+        return 0
+    if args.command == "load":
+        dsn = os.environ.get("DATABASE_URL")
+        if not dsn:
+            print("DATABASE_URL is not set", file=sys.stderr)
+            return 2
+        from .store.loader import load as load_stories  # lazy: only this cmd needs psycopg
+
+        total, active = load_stories(Path(args.infile), dsn)
+        print(f"loaded {total} stories ({active} active)")
         return 0
     if args.command == "serve":
         conn.close()

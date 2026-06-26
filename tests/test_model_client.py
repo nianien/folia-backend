@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from frontpage_pipeline.model_client import ModelClient, ModelConfig
+from folia.pipeline.model_client import ModelClient, ModelConfig
 
 
 class ModelClientTest(unittest.TestCase):

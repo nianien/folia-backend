@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parents[2]
+# repo root: src/folia/pipeline/config.py → up 3 (pipeline → folia → src → root)
+ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass(frozen=True)

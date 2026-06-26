@@ -59,14 +59,14 @@ provider = "openai"
 ## Commands
 
 ```bash
-frontpage-pipeline init-db
-frontpage-pipeline run-once          # pull from FreshRSS -> text -> cluster -> facts -> synthesize
-frontpage-pipeline extract-pending
-frontpage-pipeline facts-pending
-frontpage-pipeline synthesize-pending
-frontpage-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
-frontpage-pipeline inspect-cluster 1
-frontpage-pipeline serve --port 8000
+folia-pipeline init-db
+folia-pipeline run-once          # pull from FreshRSS -> text -> cluster -> facts -> synthesize
+folia-pipeline extract-pending
+folia-pipeline facts-pending
+folia-pipeline synthesize-pending
+folia-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
+folia-pipeline inspect-cluster 1
+folia-pipeline serve --port 8000
 ```
 
 `run-once` requires FreshRSS to be reachable. `ingest-fixture` reads a recorded Google Reader API JSON response and runs the full editorial layer offline.
@@ -74,7 +74,7 @@ frontpage-pipeline serve --port 8000
 Without editable install:
 
 ```bash
-PYTHONPATH=src python -m frontpage_pipeline.cli run-once
+PYTHONPATH=src python -m folia.pipeline.cli run-once
 ```
 
 ## Tests

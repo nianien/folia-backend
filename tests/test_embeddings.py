@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from frontpage_pipeline import embeddings
-from frontpage_pipeline.embeddings import (
+from folia.pipeline import embeddings
+from folia.pipeline.embeddings import (
     EmbeddingConfig,
     EmbeddingsUnavailable,
     cosine,

@@ -6,13 +6,8 @@
 # pipeline 跑在宿主机,通过 http://localhost:8080/api/greader.php 读已经是全文的内容。
 # Ollama(bge-m3 embedding)在 macOS 本机跑,不入 compose:ollama pull bge-m3。
 #
-# 发布层(本地容器, DB 仍用 Neon 云 Postgres, DATABASE_URL 取自 .env):
-#   frontpage-api    FastAPI 只读接口(列表/检索/详情/点赞),常驻
-#   frontpage-loader 一次性把宿主机 data/frontpage.json 灌进 Neon(profile=tools)
-# 发布流程:
-#   1) 宿主机: frontpage-pipeline export        -> data/frontpage.json
-#   2) docker compose run --rm frontpage-loader -> 灌库
-#   3) docker compose up -d frontpage-api       -> 暴露 http://localhost:8090
+# 入库(写 Neon)也在宿主机跑: ./scripts/publish.sh (folia-pipeline export + load)。
+# 本 compose 只负责基座层。
 
 services:
   rsshub:
@@ -49,28 +44,6 @@ services:
     volumes:
       # 宿主机 bind-mount(不用 docker 命名卷): 数据落本地, docker 销毁不丢
       - ./data/freshrss:/var/www/FreshRSS/data
-    networks:
-      - frontpage_net
-
-  frontpage-api:
-    build: ./backend
-    restart: unless-stopped
-    ports:
-      - "8090:8090"
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
-    networks:
-      - frontpage_net
-
-  frontpage-loader:
-    build: ./backend
-    profiles: ["tools"]
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
-    volumes:
-      - ./data:/data:ro
-    command: ["python", "loader.py", "/data/frontpage.json"]
     networks:
       - frontpage_net
 

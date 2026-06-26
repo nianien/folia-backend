@@ -82,13 +82,13 @@ def to_params(story: dict) -> dict:
 
 
 def main(argv: list[str]) -> int:
-    path = Path(argv[1]) if len(argv) > 1 else Path(__file__).parents[1] / "data" / "frontpage.json"
+    path = Path(argv[1]) if len(argv) > 1 else Path("data/frontpage.json")
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 2
     if not path.exists():
-        print(f"{path} not found — run `frontpage-pipeline export` first", file=sys.stderr)
+        print(f"{path} not found — run `folia-pipeline export` first", file=sys.stderr)
         return 2
     total, active = load(path, dsn)
     print(f"loaded {total} stories ({active} active) into Neon")
