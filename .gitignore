@@ -3,11 +3,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 *.egg-info/
-data/*.sqlite
-data/*.sqlite-shm
-data/*.sqlite-wal
-data/frontpage.json
-data/freshrss/
+data/
 backend/.venv/
 .env
 .env.*
