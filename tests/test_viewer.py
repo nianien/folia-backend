@@ -58,17 +58,17 @@ class ViewerTest(unittest.TestCase):
 
             dashboard_status, dashboard = route_request(database, "/")
             self.assertEqual(dashboard_status, 200)
-            self.assertIn("Frontpage Pipeline Viewer", dashboard)
+            self.assertIn("头版", dashboard)
             self.assertIn("City council approves new transit plan", dashboard)
 
             cluster_status, cluster = route_request(database, "/cluster/1")
             self.assertEqual(cluster_status, 200)
-            self.assertIn("Transit plan", cluster)
-            self.assertIn("Source Articles", cluster)
+            self.assertIn("City council approves new transit plan", cluster)
+            self.assertIn("Sample News", cluster)
 
             article_status, article = route_request(database, f"/article/{article_id}")
             self.assertEqual(article_status, 200)
-            self.assertIn("Facts JSON", article)
+            self.assertIn("facts JSON", article)
 
 
 def scalar(conn: sqlite3.Connection, query: str):

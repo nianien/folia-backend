@@ -17,11 +17,21 @@ from .text import jaccard
 
 
 def assign_pending_articles(conn: sqlite3.Connection, settings: dict[str, Any]) -> int:
+    """Accretion clustering, two explicit phases.
+
+    Phase 1 (directed assignment): each new article joins the single nearest
+    EXISTING cluster within threshold, else it is left unattached. Existing
+    clusters are only updated, never merged/split — there is no cluster->cluster
+    operation, so they can never merge.
+
+    Phase 2 (seed new clusters): the unattached new articles are clustered
+    among themselves into brand-new clusters.
+    """
     dedupe_cfg = settings.get("dedupe", {})
     emb_cfg = EmbeddingConfig.from_settings(settings)
     use_embeddings = is_available(emb_cfg)
     if use_embeddings:
-        threshold = float(dedupe_cfg.get("same_event_threshold", 0.82))
+        threshold = float(dedupe_cfg.get("same_event_threshold", 0.85))
     else:
         threshold = float(dedupe_cfg.get("jaccard_threshold", 0.42))
 
@@ -35,39 +45,101 @@ def assign_pending_articles(conn: sqlite3.Connection, settings: dict[str, Any]) 
             """
         )
     )
-    changed = 0
+    if not pending:
+        return 0
+
+    existing_ids = {
+        int(row["id"]) for row in conn.execute("SELECT id FROM clusters WHERE status='active'")
+    }
+
+    # Phase 1: assign to existing clusters (only) or defer.
+    unattached: list[tuple[sqlite3.Row, list[float] | None]] = []
     for article in pending:
         vector = _safe_embed(comparison_text(article), emb_cfg) if use_embeddings else None
-        if vector is not None:
-            cluster_id, similarity = find_cluster_embedding(conn, vector, threshold)
+        cluster_id, _ = best_cluster(conn, article, vector, existing_ids, use_embeddings, threshold)
+        if cluster_id is not None:
+            join_cluster(conn, cluster_id, article, vector, use_embeddings)
         else:
-            cluster_id, similarity = find_cluster(conn, article, threshold)
+            unattached.append((article, vector))
 
+    # Phase 2: cluster the leftovers among themselves into new clusters.
+    new_ids: set[int] = set()
+    for article, vector in unattached:
+        cluster_id, _ = best_cluster(conn, article, vector, new_ids, use_embeddings, threshold)
         if cluster_id is None:
-            cursor = conn.execute(
-                """
-                INSERT INTO clusters (representative_article_id, title, centroid)
-                VALUES (?, ?, ?)
-                """,
-                (article["id"], article["title"], pack_centroid(vector) if vector is not None else None),
-            )
-            cluster_id = int(cursor.lastrowid)
-            similarity = 1.0
-        elif vector is not None:
-            _update_cluster_centroid(conn, cluster_id, vector)
+            new_ids.add(create_cluster(conn, article, vector))
+        else:
+            join_cluster(conn, cluster_id, article, vector, use_embeddings)
 
-        conn.execute("UPDATE articles SET cluster_id=? WHERE id=?", (cluster_id, article["id"]))
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO cluster_articles (cluster_id, article_id, similarity)
-            VALUES (?, ?, ?)
-            """,
-            (cluster_id, article["id"], similarity),
-        )
-        refresh_cluster(conn, cluster_id)
-        changed += 1
     conn.commit()
-    return changed
+    return len(pending)
+
+
+def best_cluster(
+    conn: sqlite3.Connection,
+    article: sqlite3.Row,
+    vector: list[float] | None,
+    candidate_ids: set[int],
+    use_embeddings: bool,
+    threshold: float,
+) -> tuple[int | None, float]:
+    if not candidate_ids:
+        return None, 0.0
+    best_id: int | None = None
+    best_score = 0.0
+    if use_embeddings and vector is not None:
+        for row in conn.execute("SELECT id, centroid FROM clusters WHERE status='active'"):
+            if int(row["id"]) not in candidate_ids:
+                continue
+            centroid = unpack_centroid(row["centroid"])
+            if centroid is None:
+                continue
+            score = cosine(vector, centroid)
+            if score > best_score:
+                best_id, best_score = int(row["id"]), score
+    else:
+        article_text = comparison_text(article)
+        for row in conn.execute(
+            """
+            SELECT c.id AS id, a.title AS title, a.summary AS summary,
+                   a.extracted_text AS extracted_text
+            FROM clusters c
+            JOIN articles a ON a.id = c.representative_article_id
+            WHERE c.status='active'
+            """
+        ):
+            if int(row["id"]) not in candidate_ids:
+                continue
+            score = jaccard(article_text, comparison_text(row))
+            if score > best_score:
+                best_id, best_score = int(row["id"]), score
+    if best_id is not None and best_score >= threshold:
+        return best_id, best_score
+    return None, best_score
+
+
+def create_cluster(conn: sqlite3.Connection, article: sqlite3.Row, vector: list[float] | None) -> int:
+    cursor = conn.execute(
+        "INSERT INTO clusters (representative_article_id, title, centroid) VALUES (?, ?, ?)",
+        (article["id"], article["title"], pack_centroid(vector) if vector is not None else None),
+    )
+    cluster_id = int(cursor.lastrowid)
+    conn.execute("UPDATE articles SET cluster_id=? WHERE id=?", (cluster_id, article["id"]))
+    refresh_cluster(conn, cluster_id)
+    return cluster_id
+
+
+def join_cluster(
+    conn: sqlite3.Connection,
+    cluster_id: int,
+    article: sqlite3.Row,
+    vector: list[float] | None,
+    use_embeddings: bool,
+) -> None:
+    if use_embeddings and vector is not None:
+        _update_cluster_centroid(conn, cluster_id, vector)
+    conn.execute("UPDATE articles SET cluster_id=? WHERE id=?", (cluster_id, article["id"]))
+    refresh_cluster(conn, cluster_id)
 
 
 def _safe_embed(text: str, config: EmbeddingConfig) -> list[float] | None:
@@ -77,54 +149,17 @@ def _safe_embed(text: str, config: EmbeddingConfig) -> list[float] | None:
         return None
 
 
-def find_cluster_embedding(
-    conn: sqlite3.Connection, vector: list[float], threshold: float
-) -> tuple[int | None, float]:
-    best_id: int | None = None
-    best_score = 0.0
-    for row in conn.execute("SELECT id, centroid FROM clusters WHERE status='active'"):
-        centroid = unpack_centroid(row["centroid"])
-        if centroid is None:
-            continue
-        score = cosine(vector, centroid)
-        if score > best_score:
-            best_id = int(row["id"])
-            best_score = score
-    if best_id is not None and best_score >= threshold:
-        return best_id, best_score
-    return None, best_score
-
-
 def _update_cluster_centroid(conn: sqlite3.Connection, cluster_id: int, vector: list[float]) -> None:
-    row = conn.execute(
-        "SELECT centroid, source_count FROM clusters WHERE id=?", (cluster_id,)
-    ).fetchone()
+    row = conn.execute("SELECT centroid FROM clusters WHERE id=?", (cluster_id,)).fetchone()
     old = unpack_centroid(row["centroid"]) if row else None
-    count = int(row["source_count"]) if row else 0
+    # Running mean over the vectors actually merged so far = current article count.
+    count = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM articles WHERE cluster_id=?", (cluster_id,)
+        ).fetchone()[0]
+    )
     merged = update_centroid(old, count, vector)
     conn.execute("UPDATE clusters SET centroid=? WHERE id=?", (pack_centroid(merged), cluster_id))
-
-
-def find_cluster(conn: sqlite3.Connection, article: sqlite3.Row, threshold: float) -> tuple[int | None, float]:
-    article_text = comparison_text(article)
-    best_id: int | None = None
-    best_score = 0.0
-    rows = conn.execute(
-        """
-        SELECT c.id, c.title, a.summary, a.extracted_text
-        FROM clusters c
-        JOIN articles a ON a.id = c.representative_article_id
-        WHERE c.status='active'
-        """
-    )
-    for row in rows:
-        score = jaccard(article_text, comparison_text(row))
-        if score > best_score:
-            best_id = int(row["id"])
-            best_score = score
-    if best_id is not None and best_score >= threshold:
-        return best_id, best_score
-    return None, best_score
 
 
 def comparison_text(row: sqlite3.Row) -> str:

@@ -17,7 +17,7 @@ model = "bge-m3"
 timeout_seconds = 30
 
 [dedupe]
-same_event_threshold = 0.82   # embedding 余弦阈值(主路径)
+same_event_threshold = 0.85   # embedding 余弦阈值(主路径,取严做强边界)
 jaccard_threshold = 0.42      # 无 embedding 时的词重叠降级阈值
 lookback_hours = 48
 

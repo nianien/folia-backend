@@ -62,14 +62,6 @@ CREATE TABLE IF NOT EXISTS clusters (
   status TEXT NOT NULL DEFAULT 'active'
 );
 
-CREATE TABLE IF NOT EXISTS cluster_articles (
-  cluster_id INTEGER NOT NULL,
-  article_id TEXT NOT NULL,
-  similarity REAL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (cluster_id, article_id)
-);
-
 CREATE TABLE IF NOT EXISTS cluster_sources (
   cluster_id INTEGER NOT NULL,
   source_no INTEGER NOT NULL,
