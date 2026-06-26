@@ -5,8 +5,7 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS stories (
-    key             text PRIMARY KEY,
-    local_id        integer,
+    story_id        integer PRIMARY KEY,   -- = aggregated-article id (clusters.id), stable
     title           text NOT NULL,
     category        text NOT NULL DEFAULT 'uncategorized',
     category_label  text,

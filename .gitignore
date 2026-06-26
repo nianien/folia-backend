@@ -7,6 +7,7 @@ data/*.sqlite
 data/*.sqlite-shm
 data/*.sqlite-wal
 data/frontpage.json
+data/freshrss/
 backend/.venv/
 .env
 .env.*

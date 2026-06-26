@@ -47,7 +47,8 @@ services:
       # FreshRSS 内置拉取调度(分钟),错开整点
       CRON_MIN: "3,33"
     volumes:
-      - freshrss_data:/var/www/FreshRSS/data
+      # 宿主机 bind-mount(不用 docker 命名卷): 数据落本地, docker 销毁不丢
+      - ./data/freshrss:/var/www/FreshRSS/data
     networks:
       - frontpage_net
 
@@ -72,9 +73,6 @@ services:
     command: ["python", "loader.py", "/data/frontpage.json"]
     networks:
       - frontpage_net
-
-volumes:
-  freshrss_data:
 
 networks:
   frontpage_net:

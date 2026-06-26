@@ -5,7 +5,6 @@ cloud side loads into Neon Postgres (stories + full-text search field + sources)
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import sqlite3
@@ -52,7 +51,6 @@ def export_frontpage(conn: sqlite3.Connection) -> dict:
         sources = load_sources(conn, row["id"])
         stories.append(
             {
-                "key": story_key(sources, title),
                 "id": row["id"],
                 "title": title,
                 "category": category,
@@ -84,12 +82,6 @@ def write_frontpage(conn: sqlite3.Connection, out_path: Path) -> int:
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return payload["count"]
-
-
-def story_key(sources: list[dict], title: str) -> str:
-    """Stable cross-run key so likes survive pipeline re-runs (cluster ids reset)."""
-    basis = (sources[0]["url"] if sources else "") or title
-    return hashlib.sha1(basis.encode("utf-8")).hexdigest()
 
 
 def load_sources(conn: sqlite3.Connection, cluster_id: int) -> list[dict]:

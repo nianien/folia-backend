@@ -21,16 +21,15 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 UPSERT = """
 INSERT INTO stories (
-    key, local_id, title, category, category_label, tier, dek, image_url,
+    story_id, title, category, category_label, tier, dek, image_url,
     published_at, source_count, synthesis_md, synthesis_model, search_text,
     sources, active, updated_at
 ) VALUES (
-    %(key)s, %(id)s, %(title)s, %(category)s, %(category_label)s, %(tier)s,
+    %(id)s, %(title)s, %(category)s, %(category_label)s, %(tier)s,
     %(dek)s, %(image_url)s, %(published_at)s, %(source_count)s, %(synthesis_md)s,
     %(synthesis_model)s, %(search_text)s, %(sources)s, true, now()
 )
-ON CONFLICT (key) DO UPDATE SET
-    local_id        = EXCLUDED.local_id,
+ON CONFLICT (story_id) DO UPDATE SET
     title           = EXCLUDED.title,
     category        = EXCLUDED.category,
     category_label  = EXCLUDED.category_label,
@@ -65,8 +64,7 @@ def load(path: Path, dsn: str) -> tuple[int, int]:
 
 def to_params(story: dict) -> dict:
     params = {
-        "key": story["key"],
-        "id": story.get("id"),
+        "id": story["id"],
         "title": story["title"],
         "category": story.get("category") or "uncategorized",
         "category_label": story.get("category_label"),

@@ -15,7 +15,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 LIST_COLUMNS = (
-    "key, title, category, category_label, tier, dek, image_url, "
+    "story_id, title, category, category_label, tier, dek, image_url, "
     "published_at, source_count, like_count"
 )
 
@@ -77,7 +77,7 @@ def list_stories(
         params.append(category)
     rows = query(
         f"SELECT {LIST_COLUMNS} FROM stories {where} "
-        "ORDER BY published_at DESC NULLS LAST, key LIMIT %s OFFSET %s",
+        "ORDER BY published_at DESC NULLS LAST, story_id LIMIT %s OFFSET %s",
         (*params, limit, offset),
     )
     return {"count": len(rows), "stories": rows}
@@ -94,25 +94,25 @@ def search(q: str = Query(..., min_length=1), limit: int = Query(30, ge=1, le=10
     return {"count": len(rows), "query": q, "stories": rows}
 
 
-@app.get("/story/{key}")
-def get_story(key: str) -> dict[str, Any]:
+@app.get("/story/{story_id}")
+def get_story(story_id: int) -> dict[str, Any]:
     rows = query(
-        "SELECT key, title, category, category_label, tier, dek, image_url, "
+        "SELECT story_id, title, category, category_label, tier, dek, image_url, "
         "published_at, source_count, synthesis_md, synthesis_model, sources, like_count "
-        "FROM stories WHERE key = %s AND active",
-        (key,),
+        "FROM stories WHERE story_id = %s AND active",
+        (story_id,),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="story not found")
     return rows[0]
 
 
-@app.post("/story/{key}/like")
-def like_story(key: str) -> dict[str, Any]:
+@app.post("/story/{story_id}/like")
+def like_story(story_id: int) -> dict[str, Any]:
     rows = query(
-        "UPDATE stories SET like_count = like_count + 1 WHERE key = %s AND active "
-        "RETURNING key, like_count",
-        (key,),
+        "UPDATE stories SET like_count = like_count + 1 WHERE story_id = %s AND active "
+        "RETURNING story_id, like_count",
+        (story_id,),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="story not found")

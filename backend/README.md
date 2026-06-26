@@ -9,9 +9,10 @@ Read-mostly API over the published frontpage. The local pipeline produces
 pipeline export -> data/frontpage.json -> loader.py -> Neon Postgres <- main.py (FastAPI) <- frontend
 ```
 
-`stories.key` is a stable per-story hash (first source URL), so re-publishing
-preserves `like_count`. Each load marks the table inactive then re-activates the
-current snapshot; the API only serves `active` rows.
+`stories.story_id` is the aggregated-article id (`clusters.id`), stable by
+construction because clusters are never destroyed (accretion model). Re-publishing
+upserts by `story_id` and preserves `like_count`. Each load marks the table
+inactive then re-activates the current snapshot; the API only serves `active` rows.
 
 ## Deploy (local container, DB stays on Neon)
 
@@ -47,7 +48,7 @@ backend/.venv/bin/uvicorn main:app --app-dir backend --port 8090
 | GET | `/healthz` | DB ping |
 | GET | `/stories?category=&limit=&offset=` | list, newest first |
 | GET | `/search?q=` | trigram search (CN/EN) over title+body |
-| GET | `/story/{key}` | full detail incl. synthesis + sources |
+| GET | `/story/{story_id}` | full detail incl. synthesis + sources |
 | POST | `/story/{key}/like` | global like counter (no auth yet) |
 
 Search uses `pg_trgm` (substring) rather than a tsvector config so it works for
