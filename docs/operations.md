@@ -24,11 +24,12 @@ Ollama bge-m3 (本机, 不入 compose)       load:   → Neon Postgres(入库)
 
 ## 2. 前置
 
+一站式入口是 `./scripts/folia.sh`（`./scripts/folia.sh help` 看全部命令）。
+
 ```bash
-export PATH="$HOME/.orbstack/bin:$PATH"   # OrbStack docker CLI
-cp .env.example .env                       # 填 FRESHRSS_* / DATABASE_URL
-pip install -e .                           # 安装本包(含 psycopg, 入库要用)
-ollama pull bge-m3                          # 本机 embedding
+./scripts/folia.sh install     # 建 .venv 并 pip install -e .(含 psycopg)
+cp .env.example .env           # 填 FRESHRSS_* / DATABASE_URL
+ollama pull bge-m3             # 本机 embedding
 ```
 
 `.env` 需要：`FRESHRSS_API_URL` / `FRESHRSS_USER` / `FRESHRSS_API_PASSWORD`（基座层接入）、
@@ -40,12 +41,14 @@ ollama pull bge-m3                          # 本机 embedding
 
 ---
 
-## 3. 启动基座层
+## 3. 启动
 
 ```bash
-./scripts/base-up.sh        # 拉起 rsshub/fulltextrss/freshrss 并等待就绪
-./scripts/base-status.sh    # 状态
-./scripts/base-down.sh      # 停
+./scripts/folia.sh start              # 基座层 + Web UI 预览(:8000), 前台
+./scripts/folia.sh start --no-web     # 只起基座层
+./scripts/folia.sh serve              # 只起 Web UI 预览(:8000)
+./scripts/folia.sh status             # 容器 + 端口探测
+./scripts/folia.sh stop               # 停基座层
 ```
 
 首次需在 `http://localhost:8080` 完成 FreshRSS 一次性配置（建账号 → 开 Google Reader API →
@@ -57,20 +60,13 @@ ollama pull bge-m3                          # 本机 embedding
 ## 4. 跑管道 + 入库
 
 ```bash
-export PYTHONPATH=src      # 或已 pip install -e . 则免
-
-# 全链路(抓取→清洗→聚合, 写本地 SQLite)
-python -m folia.pipeline.cli run-once
-
-# 入库到 Neon(导出 + 写库)
-./scripts/publish.sh
-#   等价于:
-#   python -m folia.pipeline.cli export      # → data/frontpage.json
-#   python -m folia.pipeline.cli load        # → Neon(需 DATABASE_URL + psycopg)
+./scripts/folia.sh run        # run-once: 抓取→清洗→聚合(写本地 SQLite)
+./scripts/folia.sh publish    # 入库: export + load 到 Neon
 ```
 
-其它子命令：`init-db`、`extract-pending`、`facts-pending`、`synthesize-pending`、
-`inspect-cluster <id>`、`ingest-fixture <json>`、`serve`（本地预览 UI）。
+底层等价于 `python -m folia.pipeline.cli <run-once|export|load>`。其它子命令：`init-db`、
+`extract-pending`、`facts-pending`、`synthesize-pending`、`inspect-cluster <id>`、
+`ingest-fixture <json>`、`serve`（本地预览 UI）。
 
 **入库语义（快照）**：`load` 在事务内把全表标记 `active=false`，再按 `story_id` upsert
 当前批为 `active=true`、覆盖内容、**不动 `like_count`** → 重跑保留计数；消失的 story 留着但
@@ -97,7 +93,7 @@ python -m folia.pipeline.cli run-once
 | `source .env` 报 `&` / `command not found` | DATABASE_URL 含 `&` | 用 `grep ... \| cut -d= -f2-` 取值 |
 | `load` 报 `ModuleNotFoundError: psycopg` | 环境没装 psycopg | `pip install -e .` 或 `pip install 'psycopg[binary]'` |
 | `DATABASE_URL is not set` | `.env` 没该行 / 没注入 | 确认 `.env` 有 `DATABASE_URL` |
-| FreshRSS 拉取失败 | 基座层没起 / OPML 没导 | `./scripts/base-status.sh`，查 `config/freshrss/README.md` |
+| FreshRSS 拉取失败 | 基座层没起 / OPML 没导 | `./scripts/folia.sh status`，查 `config/freshrss/README.md` |
 | 聚类全走 Jaccard 降级 | Ollama 不可达 | `ollama serve` + `ollama pull bge-m3` |
 
 查 Neon 数据：
