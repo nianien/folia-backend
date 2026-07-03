@@ -124,6 +124,11 @@ def _coerce(default: Any, value: Any) -> Any:
     return text
 
 
+def is_pg_dsn(dsn: str) -> bool:
+    """只允许 postgres 连接串(挡 SSRF: 别的 scheme 一律拒)。"""
+    return dsn.startswith("postgres://") or dsn.startswith("postgresql://")
+
+
 def database_path() -> Path:
     configured = os.environ.get("FOLIA_DB_PATH", "data/frontpage.sqlite")
     path = Path(configured)

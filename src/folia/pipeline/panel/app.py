@@ -9,19 +9,22 @@
 """
 from __future__ import annotations
 
+import base64
+import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import viewer as viewer_mod
-from ..config import load_settings
+from ..config import is_pg_dsn, load_settings
 from ..db import connect
 from ..freshrss_client import FreshRSSClient, FreshRSSError
-from . import store
+from . import settings as cfg_store
 from .runner import PipelineRunner
 
 BASE = Path(__file__).resolve().parent
@@ -38,6 +41,28 @@ def create_app(db_path: Path) -> FastAPI:
         runner.stop()
 
     app = FastAPI(title="Folia 控制面板", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def _auth(request: Request, call_next):
+        # 设了 FOLIA_PANEL_PASSWORD 就对 /admin/* 强制 HTTP Basic; 预览页不拦
+        password = os.environ.get("FOLIA_PANEL_PASSWORD")
+        if password and request.url.path.startswith("/admin"):
+            user = os.environ.get("FOLIA_PANEL_USER", "admin")
+            header = request.headers.get("authorization", "")
+            ok = False
+            if header.startswith("Basic "):
+                try:
+                    decoded = base64.b64decode(header[6:]).decode("utf-8")
+                    got_user, _, got_pw = decoded.partition(":")
+                    ok = secrets.compare_digest(got_user, user) and secrets.compare_digest(got_pw, password)
+                except Exception:
+                    ok = False
+            if not ok:
+                return Response(
+                    "Unauthorized", status_code=401,
+                    headers={"WWW-Authenticate": 'Basic realm="folia"'},
+                )
+        return await call_next(request)
 
     def db():
         return connect(db_path)
@@ -83,13 +108,13 @@ def create_app(db_path: Path) -> FastAPI:
 
     @app.post("/admin/loop/start")
     def loop_start():
-        conn = db(); store.set_many(conn, {"loop.enabled": "1"}); conn.close()
+        conn = db(); cfg_store.set_many(conn, {"loop.enabled": "1"}); conn.close()
         runner.notify()
         return RedirectResponse("/admin", status_code=303)
 
     @app.post("/admin/loop/stop")
     def loop_stop():
-        conn = db(); store.set_many(conn, {"loop.enabled": "0"}); conn.close()
+        conn = db(); cfg_store.set_many(conn, {"loop.enabled": "0"}); conn.close()
         runner.notify()
         return RedirectResponse("/admin", status_code=303)
 
@@ -138,15 +163,22 @@ def create_app(db_path: Path) -> FastAPI:
             "loop.interval": loop_interval,
         }
         # 密钥类: 写入型——留空则保持不变, 不回显; DATABASE_URL 填 'none' 显式清空
+        note = "已保存 ✓"
         if freshrss_api_password:
             values["freshrss.api_password"] = freshrss_api_password
         if database_url:
-            values["database.url"] = "" if database_url.strip().lower() == "none" else database_url
+            dsn = database_url.strip()
+            if dsn.lower() == "none":
+                values["database.url"] = ""
+            elif is_pg_dsn(dsn):
+                values["database.url"] = dsn
+            else:
+                note = "已保存(DATABASE_URL 必须 postgres:// 开头, 该项已忽略)"
         conn = db()
-        store.set_many(conn, values)
+        cfg_store.set_many(conn, values)
         conn.close()
         runner.notify()
-        return RedirectResponse("/admin/config?msg=" + quote("已保存 ✓"), status_code=303)
+        return RedirectResponse("/admin/config?msg=" + quote(note), status_code=303)
 
     @app.post("/admin/config/test")
     def config_test():
@@ -170,7 +202,7 @@ def create_app(db_path: Path) -> FastAPI:
             subs = client(conn).list_subscriptions()
         except Exception as exc:
             error = str(exc)
-        mappings = store.list_source_map(conn)
+        mappings = cfg_store.list_source_map(conn)
         conn.close()
         return templates.TemplateResponse(
             request,
@@ -208,7 +240,7 @@ def create_app(db_path: Path) -> FastAPI:
         added = 0
         try:
             cl = client(conn)
-            for feed in store.list_feed_seed(conn):
+            for feed in cfg_store.list_feed_seed(conn):
                 try:
                     cl.add_subscription(feed["url"])
                     added += 1
@@ -231,14 +263,14 @@ def create_app(db_path: Path) -> FastAPI:
         category: str = Form("uncategorized"),
     ):
         conn = db()
-        store.set_source_map(conn, match_type, match_key.strip(), name.strip(), tier.strip(), category.strip())
+        cfg_store.set_source_map(conn, match_type, match_key.strip(), name.strip(), tier.strip(), category.strip())
         conn.close()
         return RedirectResponse("/admin/sources?msg=" + quote("映射已保存 ✓"), status_code=303)
 
     @app.post("/admin/sources/map/remove")
     def map_remove(match_type: str = Form(...), match_key: str = Form(...)):
         conn = db()
-        store.delete_source_map(conn, match_type, match_key)
+        cfg_store.delete_source_map(conn, match_type, match_key)
         conn.close()
         return RedirectResponse("/admin/sources?msg=" + quote("映射已删除 ✓"), status_code=303)
 

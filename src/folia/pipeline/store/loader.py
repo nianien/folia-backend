@@ -48,6 +48,10 @@ ON CONFLICT (story_id) DO UPDATE SET
 
 
 def load(path: Path, dsn: str) -> tuple[int, int]:
+    from ..config import is_pg_dsn
+
+    if not is_pg_dsn(dsn):
+        raise ValueError("DATABASE_URL 必须是 postgres:// 连接串")
     payload = json.loads(path.read_text(encoding="utf-8"))
     stories = payload.get("stories", [])
     with psycopg.connect(dsn, autocommit=False) as conn:

@@ -16,7 +16,6 @@ from .model_client import create_model_client
 from .store.export import write_frontpage
 from .synthesizer import synthesize_pending
 from .text import clean_text
-from .viewer import serve
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,9 +26,6 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("extract-pending")
     sub.add_parser("facts-pending")
     sub.add_parser("synthesize-pending")
-    serve_parser = sub.add_parser("serve")
-    serve_parser.add_argument("--host", default="127.0.0.1")
-    serve_parser.add_argument("--port", type=int, default=8000)
     panel_parser = sub.add_parser("panel")
     panel_parser.add_argument("--host", default="127.0.0.1")
     panel_parser.add_argument("--port", type=int, default=8000)
@@ -73,10 +69,6 @@ def main(argv: list[str] | None = None) -> int:
 
         total, active = load_stories(Path(args.infile), dsn)
         print(f"loaded {total} stories ({active} active)")
-        return 0
-    if args.command == "serve":
-        conn.close()
-        serve(database_path(), args.host, args.port)
         return 0
     if args.command == "panel":
         conn.close()  # 面板/循环各自开连接
