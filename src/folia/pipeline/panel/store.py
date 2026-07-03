@@ -57,3 +57,13 @@ def delete_source_map(conn: sqlite3.Connection, match_type: str, match_key: str)
         "DELETE FROM source_map WHERE match_type=? AND match_key=?", (match_type, match_key)
     )
     conn.commit()
+
+
+def list_feed_seed(conn: sqlite3.Connection) -> list[dict]:
+    """订阅种子: db feed_seed 表, 表空则回退到代码内置默认(config.DEFAULT_FEEDS)。"""
+    rows = list(conn.execute("SELECT url, title, category FROM feed_seed ORDER BY category, title"))
+    if not rows:
+        from ..config import DEFAULT_FEEDS
+
+        return [{"url": u, "title": t, "category": c} for (u, t, c) in DEFAULT_FEEDS]
+    return [{"url": r[0], "title": r[1], "category": r[2]} for r in rows]

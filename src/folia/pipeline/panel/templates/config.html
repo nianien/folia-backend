@@ -12,7 +12,8 @@
     <label>FreshRSS 用户名</label>
     <input type="text" name="freshrss_user" value="{{ s.freshrss.user }}">
     <label>FreshRSS API 密码</label>
-    <input type="password" name="freshrss_api_password" value="{{ s.freshrss.api_password }}">
+    <input type="password" name="freshrss_api_password" value=""
+           placeholder="{{ '已设置 ······（留空则不改）' if s.freshrss.api_password else '未设置' }}">
     <div class="row" style="margin-top:12px">
       <div style="flex:1"><label>批量大小</label>
         <input type="number" name="freshrss_batch_size" value="{{ s.freshrss.batch_size }}"></div>
@@ -24,8 +25,9 @@
   </div>
 
   <div class="card">
-    <label>入库目标 DATABASE_URL（Neon，留空则只本地聚合不入库）</label>
-    <input type="text" name="database_url" value="{{ s.database.url }}" placeholder="postgres://...">
+    <label>入库目标 DATABASE_URL（Neon，含密码，写入后不回显）</label>
+    <input type="password" name="database_url" value=""
+           placeholder="{{ '已设置 ······（留空则不改; 清空请填 none）' if s.database.url else '未设置（留空=只本地聚合不入库）' }}">
     <label>轮询间隔（秒）</label>
     <input type="number" name="loop_interval" min="5" value="{{ s.loop.interval }}">
   </div>

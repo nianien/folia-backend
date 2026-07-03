@@ -13,7 +13,7 @@ cp .env.example .env        # fill in FreshRSS user / API password
 docker compose up -d        # rsshub :1200, fulltextrss :8081, freshrss :8080
 ```
 
-Then do the one-time FreshRSS setup (account, enable Google Reader API, wire full-text extraction, import OPML) — see `config/freshrss/README.md`.
+Then do the one-time FreshRSS setup (account, enable Google Reader API, wire full-text extraction) — see `docs/freshrss-setup.md`. Subscriptions and tier/category mapping are managed from the control panel (Data sources page).
 
 Embedding dedupe uses a local Ollama (not in compose):
 
@@ -38,23 +38,24 @@ For direct execution without installation, prefix commands with `PYTHONPATH=src`
 
 ## Configuration
 
-- `config/settings.toml`: database path, `[freshrss]` (api_url/batch_size/mark_read), `[embeddings]` (Ollama url/model), `[dedupe]` thresholds, `[model]` provider.
-- `config/sources.toml`: **source metadata map** — associates a FreshRSS feed (by `stream_id` or `match` on `origin.title`) to a `tier`/`category`. It no longer drives fetching.
-- `.env`: secrets (`FRESHRSS_USER`, `FRESHRSS_API_PASSWORD`, `OLLAMA_URL`, model API keys). Gitignored.
+All runtime config now lives in the SQLite DB and is edited from the **control panel**
+(`http://localhost:8000`), not in files:
+
+- `settings` table (dotted keys → nested settings dict, built on in-code defaults in `config.py`):
+  FreshRSS creds/params, `embeddings` (Ollama), `dedupe` thresholds, `model` provider,
+  `database.url` (Neon入库), `loop.enabled`/`loop.interval`.
+- `source_map` table: FreshRSS feed (by `stream_id` or title) → `tier`/`category`.
+- `feed_seed` table: default subscriptions to bulk-import (seeded from `config.DEFAULT_FEEDS`).
+
+Only the DB path is a bootstrap value (`FOLIA_DB_PATH` env or `data/frontpage.sqlite`).
 
 ## Model Providers
 
 - `heuristic`: local fallback, no API key.
 - `openai` / `claude` / `gemini` / `xinapi`: set the matching key (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XIN_API_KEY`).
 
-Select in `config/settings.toml`:
-
-```toml
-[model]
-provider = "openai"
-```
-
-`facts-pending` / `synthesize-pending` use the selected model; `heuristic` uses deterministic local fallbacks.
+Select via the control panel (Config page) → `model.provider` (stored as `model.provider` in the
+`settings` table). `heuristic` uses deterministic local fallbacks.
 
 ## Commands
 

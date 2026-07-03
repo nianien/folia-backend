@@ -41,7 +41,7 @@ ollama pull bge-m3               # 本机 embedding(一次)
 
 ## 3. 首次配置（全在面板里）
 
-1. 浏览器开 `http://localhost:8080`，建 FreshRSS 账号并开启 Google Reader API（详见 `config/freshrss/README.md`）。
+1. 浏览器开 `http://localhost:8080`，建 FreshRSS 账号并开启 Google Reader API（详见 `docs/freshrss-setup.md`）。
 2. 面板 **配置**：填 FreshRSS 凭据、`DATABASE_URL`（Neon，留空则只本地聚合不入库）、轮询间隔，点「测试 FreshRSS 连接」。
 3. 面板 **数据源**：「从 OPML 导入」或手动加订阅。
 4. 面板 **控制台**：「启动循环」。之后每 N 秒自动跑一轮（抓取→清洗→聚合→入库）；也可「立即跑一轮」。

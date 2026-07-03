@@ -9,7 +9,6 @@
 """
 from __future__ import annotations
 
-import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -27,7 +26,6 @@ from .runner import PipelineRunner
 
 BASE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
-OPML_PATH = Path("config/freshrss/subscriptions.opml")
 
 
 def create_app(db_path: Path) -> FastAPI:
@@ -127,24 +125,25 @@ def create_app(db_path: Path) -> FastAPI:
         database_url: str = Form(""),
         loop_interval: str = Form("1800"),
     ):
+        values = {
+            "freshrss.api_url": freshrss_api_url,
+            "freshrss.user": freshrss_user,
+            "freshrss.batch_size": freshrss_batch_size,
+            "freshrss.mark_read": "1" if freshrss_mark_read else "0",
+            "embeddings.url": embeddings_url,
+            "embeddings.model": embeddings_model,
+            "dedupe.same_event_threshold": dedupe_same_event_threshold,
+            "dedupe.jaccard_threshold": dedupe_jaccard_threshold,
+            "model.provider": model_provider,
+            "loop.interval": loop_interval,
+        }
+        # 密钥类: 写入型——留空则保持不变, 不回显; DATABASE_URL 填 'none' 显式清空
+        if freshrss_api_password:
+            values["freshrss.api_password"] = freshrss_api_password
+        if database_url:
+            values["database.url"] = "" if database_url.strip().lower() == "none" else database_url
         conn = db()
-        store.set_many(
-            conn,
-            {
-                "freshrss.api_url": freshrss_api_url,
-                "freshrss.user": freshrss_user,
-                "freshrss.api_password": freshrss_api_password,
-                "freshrss.batch_size": freshrss_batch_size,
-                "freshrss.mark_read": "1" if freshrss_mark_read else "0",
-                "embeddings.url": embeddings_url,
-                "embeddings.model": embeddings_model,
-                "dedupe.same_event_threshold": dedupe_same_event_threshold,
-                "dedupe.jaccard_threshold": dedupe_jaccard_threshold,
-                "model.provider": model_provider,
-                "database.url": database_url,
-                "loop.interval": loop_interval,
-            },
-        )
+        store.set_many(conn, values)
         conn.close()
         runner.notify()
         return RedirectResponse("/admin/config?msg=" + quote("已保存 ✓"), status_code=303)
@@ -203,19 +202,19 @@ def create_app(db_path: Path) -> FastAPI:
             conn.close()
         return RedirectResponse("/admin/sources?msg=" + quote(msg), status_code=303)
 
-    @app.post("/admin/sources/import-opml")
+    @app.post("/admin/sources/import-seed")
     def sources_import():
         conn = db()
         added = 0
         try:
             cl = client(conn)
-            for url in _opml_feed_urls(OPML_PATH):
+            for feed in store.list_feed_seed(conn):
                 try:
-                    cl.add_subscription(url)
+                    cl.add_subscription(feed["url"])
                     added += 1
                 except Exception:
                     pass
-            msg = f"从 OPML 导入 {added} 个订阅"
+            msg = f"导入默认订阅 {added} 个"
         except Exception as exc:
             msg = f"失败: {exc}"
         finally:
@@ -244,12 +243,3 @@ def create_app(db_path: Path) -> FastAPI:
         return RedirectResponse("/admin/sources?msg=" + quote("映射已删除 ✓"), status_code=303)
 
     return app
-
-
-def _opml_feed_urls(path: Path) -> list[str]:
-    if not path.exists():
-        return []
-    import html as _html
-
-    text = path.read_text(encoding="utf-8")
-    return [_html.unescape(u) for u in re.findall(r'xmlUrl="([^"]+)"', text)]

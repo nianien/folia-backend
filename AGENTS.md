@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Python backend prototype. `src/folia.pipeline/` contains the editorial-layer pipeline package, `config/*.toml` contains runtime configuration, `config/freshrss/` holds base-layer wiring (OPML + setup notes), `docker-compose.yml` brings up the base layer (RSSHub + FreshRSS + FiveFilters Full-Text RSS), `docs/` contains product and technical design documents, `tests/` contains standard-library `unittest` coverage, and `data/` is reserved for local SQLite files.
+This repository is a Python backend prototype. `src/folia/pipeline/` contains the pipeline package (incl. the FastAPI control panel under `panel/`); runtime configuration lives in the SQLite DB (`settings`/`source_map`/`feed_seed` tables), edited via the control panel; `docker-compose.yml` brings up the base layer (RSSHub + FreshRSS + FiveFilters Full-Text RSS) plus the `panel` service; `docs/` contains product/technical design docs and the FreshRSS setup guide; `tests/` contains standard-library `unittest` coverage; and `data/` holds the local SQLite DB.
 
 The pipeline reads already-full-text articles from FreshRSS via the Google Reader API; it does not fetch web pages or parse RSS itself.
 

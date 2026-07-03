@@ -39,6 +39,18 @@ class SourceMap:
         return SourceMeta(name=None, tier="unknown", category="uncategorized")
 
 
+# 默认订阅种子(原 subscriptions.opml): (feed_url, 显示名, 分组)。面板"导入默认订阅"用;
+# fresh 环境 feed_seed 表为空时回退到这里。URL 是经 fulltextrss 包装的全文源。
+DEFAULT_FEEDS: list[tuple[str, str, str]] = [
+    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Ffeeds.apnews.com%2Frss%2Fapf-topnews&max=20", "AP News", "Wire"),
+    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fwww.reutersagency.com%2Ffeed%2F%3Fbest-topics%3Dworld%26post_type%3Dbest&max=20", "Reuters World", "Wire"),
+    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fwww.theguardian.com%2Fworld%2Frss&max=20", "Guardian World", "Broadsheet"),
+    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml&max=20", "BBC World", "Broadsheet"),
+    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fhnrss.org%2Ffrontpage&max=20", "Hacker News", "Interest"),
+    ("http://fulltextrss/makefulltextfeed.php?url=http%3A%2F%2Frsshub%3A1200%2Flatepost&max=20", "LatePost", "CN"),
+]
+
+
 def _defaults() -> dict[str, Any]:
     return {
         "database": {"url": os.environ.get("DATABASE_URL", "")},  # 入库目标(Neon); 空=不入库

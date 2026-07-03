@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS source_map (
   PRIMARY KEY (match_type, match_key)
 );
 
+CREATE TABLE IF NOT EXISTS feed_seed (
+  url TEXT PRIMARY KEY,        -- 订阅种子(原 OPML): 面板"导入默认订阅"用
+  title TEXT,
+  category TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

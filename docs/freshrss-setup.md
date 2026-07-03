@@ -44,14 +44,14 @@ http://fulltextrss/makefulltextfeed.php?url=
 curl -s 'http://localhost:8081/makefulltextfeed.php?url=https://blog.python.org/&max=1' | head
 ```
 
-## 4. 导入订阅
+## 4. 导入订阅 & tier/category(都在控制面板里)
 
-WebUI → 订阅管理 → 导入/导出 → 导入 `config/freshrss/subscriptions.opml`。
-RSSHub 造源的条目 `xmlUrl` 用 `http://rsshub:1200/...`(容器内可达)。
+订阅与 tier/category 映射都在**控制面板 `http://localhost:8000` → 数据源**页管理:
 
-## 5. 关联 tier/category
+- 「导入默认订阅」一键把内置默认订阅(原 OPML,现存 db `feed_seed` 表)加进 FreshRSS,或手动填 URL 添加。
+- 「tier / category 映射」按 stream_id(如 `feed/3`)或标题给来源打 `tier`/`category`(存 db `source_map` 表),供聚类与排序用;未匹配默认 `tier="unknown"` / `category="uncategorized"`。
 
-导入后每个 feed 会得到一个 streamId(形如 `feed/3`)。在 `config/sources.toml` 里用 `match`(对 origin.title)或 `stream_id` 关联 `tier`/`category`,供聚类与后续排序使用。未匹配的源默认 `tier="unknown"` / `category="uncategorized"`。
+RSSHub 造源的 URL 用容器内主机名 `http://rsshub:1200/...`。
 
 ## 6. Embedding(本机 Ollama,不在 compose 里)
 

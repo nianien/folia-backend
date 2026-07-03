@@ -55,7 +55,7 @@ services:
       - fulltextrss
       - freshrss
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"   # 只绑回环, 不暴露到局域网
     environment:
       # URL 类默认(容器网络): 面板没填时回退到这些; 面板填了以面板为准
       FRESHRSS_API_URL: http://freshrss/api/greader.php
