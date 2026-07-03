@@ -9,13 +9,19 @@ from .text import clean_text
 
 
 def synthesize_pending(conn: sqlite3.Connection, model_client: ModelClient | None = None) -> int:
+    # 只综述"待综述"的簇: 新建的(synthesis_status 为 NULL)或被加了新成员的(标 'stale')。
+    # 已 'ok' 且本轮没动过的跳过, 避免每轮重算全部簇。
     cluster_ids = [
-        int(row["cluster_id"])
+        int(row["id"])
         for row in conn.execute(
             """
-            SELECT DISTINCT cluster_id
-            FROM articles
-            WHERE cluster_id IS NOT NULL AND article_facts IS NOT NULL
+            SELECT c.id
+            FROM clusters c
+            WHERE COALESCE(c.synthesis_status, '') != 'ok'
+              AND EXISTS (
+                  SELECT 1 FROM articles a
+                  WHERE a.cluster_id = c.id AND a.article_facts IS NOT NULL
+              )
             """
         )
     ]

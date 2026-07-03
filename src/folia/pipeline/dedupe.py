@@ -140,6 +140,8 @@ def join_cluster(
         _update_cluster_centroid(conn, cluster_id, vector)
     conn.execute("UPDATE articles SET cluster_id=? WHERE id=?", (cluster_id, article["id"]))
     refresh_cluster(conn, cluster_id)
+    # 内容变了 → 标记待综述, 让综述步骤只重算它(而非全部簇)
+    conn.execute("UPDATE clusters SET synthesis_status='stale' WHERE id=?", (cluster_id,))
 
 
 def _safe_embed(text: str, config: EmbeddingConfig) -> list[float] | None:
