@@ -1,76 +1,60 @@
-# 运维文档（folia-pipeline）
+# 运维文档（folia）
 
-`folia-pipeline` 是个纯后端数据管道：**抓取 → 清洗 → 聚合 → 入库**。产物是 Neon
-Postgres 里就绪的聚合数据；谁去读它（查询/检索/点赞）是另一个消费端应用的事，不在本仓库。
+folia 是个纯后端数据管道：**抓取 → 清洗 → 聚合 → 入库**。产物是 Neon Postgres 里就绪的
+聚合数据；谁去读它（查询/检索/点赞）是另一个消费端应用的事，不在本仓库。
+
+日常操作都在**控制面板**里点：配置、启停循环、改间隔、管数据源、看预览。
 
 包：`folia.pipeline`（`src/folia/pipeline/`，PEP 420 命名空间）。
 
 ---
 
-## 1. 流程
+## 1. 架构
 
 ```
-基座层(docker compose)                宿主机管道(folia.pipeline)
-─────────────────────                 ──────────────────────────────
-RSSHub + fulltextrss + FreshRSS  ──▶  run-once: 抓取→清洗→聚合(SQLite)
-  (抓取/全文/调度, :8080 GReader)        export: → data/frontpage.json
-Ollama bge-m3 (本机, 不入 compose)       load:   → Neon Postgres(入库)
+docker compose 一套:
+  rsshub + fulltextrss + freshrss   基座层(抓取/全文/调度, :8080 GReader)
+  panel                             控制面板(:8000) = Web 控制台 + 应用内 pipeline 循环
+宿主机: Ollama bge-m3 (ollama pull bge-m3), 经 host.docker.internal 供 panel 调用
 ```
 
-- **真相源**：`data/frontpage.sqlite`（清洗文章 + 聚合文章），在宿主机，不入 docker 卷。
-- **入库目标**：Neon `stories` 表，主键 `story_id` = 聚合文章自增 id（`clusters.id`），稳定。
+- **控制面板 = 一个应用**：Web 控制台 + 内部循环。启停/间隔/凭据/数据源都在面板里，配置存 SQLite。
+- **真相源**：`data/frontpage.sqlite`（清洗文章 + 聚合文章 + settings 配置），bind-mount 到宿主机 `./data`，docker 销毁不丢。
+- **入库目标**：Neon `stories` 表，`story_id` = 聚合文章自增 id（`clusters.id`）。
 
 ---
 
-## 2. 前置
-
-一站式入口是 `./scripts/folia.sh`（`./scripts/folia.sh help` 看全部命令）。
+## 2. 起停
 
 ```bash
-./scripts/folia.sh install     # 建 .venv 并 pip install -e .(含 psycopg)
-cp .env.example .env           # 填 FRESHRSS_* / DATABASE_URL
-ollama pull bge-m3             # 本机 embedding
+export PATH="$HOME/.orbstack/bin:$PATH"
+ollama pull bge-m3               # 本机 embedding(一次)
+
+./scripts/folia.sh start         # 构建并拉起 基座层 + 控制面板
+./scripts/folia.sh status        # 容器 + 端口探测
+./scripts/folia.sh stop          # 停整套(数据在 ./data, 不丢)
 ```
 
-`.env` 需要：`FRESHRSS_API_URL` / `FRESHRSS_USER` / `FRESHRSS_API_PASSWORD`（基座层接入）、
-`DATABASE_URL`（Neon 入库）。
-
-> ⚠️ `.env` 的 `DATABASE_URL` 含 `&`，**不能 `source .env`**（shell 会把 `&` 当后台符）。
-> 脚本里这样取：`export DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"`。
-> docker-compose 按字面解析 `.env`，`${...}` 安全。
+`start` 后：**控制面板 http://localhost:8000**。首次没配 FreshRSS 也能起来（不再有死锁）。
 
 ---
 
-## 3. 启动
+## 3. 首次配置（全在面板里）
 
-```bash
-./scripts/folia.sh start              # 基座层 + Web UI 预览(:8000), 前台
-./scripts/folia.sh start --no-web     # 只起基座层
-./scripts/folia.sh serve              # 只起 Web UI 预览(:8000)
-./scripts/folia.sh status             # 容器 + 端口探测
-./scripts/folia.sh stop               # 停基座层
-```
+1. 浏览器开 `http://localhost:8080`，建 FreshRSS 账号并开启 Google Reader API（详见 `config/freshrss/README.md`）。
+2. 面板 **配置**：填 FreshRSS 凭据、`DATABASE_URL`（Neon，留空则只本地聚合不入库）、轮询间隔，点「测试 FreshRSS 连接」。
+3. 面板 **数据源**：「从 OPML 导入」或手动加订阅。
+4. 面板 **控制台**：「启动循环」。之后每 N 秒自动跑一轮（抓取→清洗→聚合→入库）；也可「立即跑一轮」。
 
-首次需在 `http://localhost:8080` 完成 FreshRSS 一次性配置（建账号 → 开 Google Reader API →
-接全文 → 导入 OPML），详见 `config/freshrss/README.md`。FreshRSS 数据落宿主机
-`./data/freshrss`（bind-mount，docker 销毁不丢）。
+配置存在 SQLite `settings` 表；循环每轮读它并写入进程环境供既有代码沿用。
 
 ---
 
-## 4. 跑管道 + 入库
+## 4. 循环与入库语义
 
-```bash
-./scripts/folia.sh run        # run-once: 抓取→清洗→聚合(写本地 SQLite)
-./scripts/folia.sh publish    # 入库: export + load 到 Neon
-```
-
-底层等价于 `python -m folia.pipeline.cli <run-once|export|load>`。其它子命令：`init-db`、
-`extract-pending`、`facts-pending`、`synthesize-pending`、`inspect-cluster <id>`、
-`ingest-fixture <json>`、`serve`（本地预览 UI）。
-
-**入库语义（快照）**：`load` 在事务内把全表标记 `active=false`，再按 `story_id` upsert
-当前批为 `active=true`、覆盖内容、**不动 `like_count`** → 重跑保留计数；消失的 story 留着但
-`active=false`。
+- 循环由 panel 应用内的后台线程负责；`loop_enabled` 控制启停、`interval` 控制固定间隔。
+- 每轮：`run-once`（抓取→清洗→聚合，写本地 SQLite）；若配了 `DATABASE_URL` 则顺带 export + load 入库。
+- **入库快照**：`load` 事务内标全表 `active=false`，按 `story_id` upsert 当前批为 `active=true`、覆盖内容、**不动 `like_count`**。
 
 ---
 
@@ -81,8 +65,8 @@ ollama pull bge-m3             # 本机 embedding
 - **Phase 1（定向分配）**：新文章归入最近的现有簇（余弦 ≥ 严格阈值 0.85），否则未认领。
 - **Phase 2（新簇）**：未认领的新文章彼此聚成新簇。
 
-没有"簇+簇→合并"操作，所以簇永不合并，`story_id` 由此天然稳定，likes 安全。详见
-`docs/data-pipeline-technical-design.md`。
+没有"簇+簇→合并"操作，所以簇永不合并，`story_id` 天然稳定。综述只重算本轮新建/更新过的簇。
+详见 `docs/data-pipeline-technical-design.md`。
 
 ---
 
@@ -90,14 +74,15 @@ ollama pull bge-m3             # 本机 embedding
 
 | 现象 | 原因 | 解决 |
 |------|------|------|
-| `source .env` 报 `&` / `command not found` | DATABASE_URL 含 `&` | 用 `grep ... \| cut -d= -f2-` 取值 |
-| `load` 报 `ModuleNotFoundError: psycopg` | 环境没装 psycopg | `pip install -e .` 或 `pip install 'psycopg[binary]'` |
-| `DATABASE_URL is not set` | `.env` 没该行 / 没注入 | 确认 `.env` 有 `DATABASE_URL` |
-| FreshRSS 拉取失败 | 基座层没起 / OPML 没导 | `./scripts/folia.sh status`，查 `config/freshrss/README.md` |
-| 聚类全走 Jaccard 降级 | Ollama 不可达 | `ollama serve` + `ollama pull bge-m3` |
+| 面板「立即跑」记为失败: FreshRSS 拉取失败 | 凭据没配 / 基座层没起 | 面板 配置 填凭据并测连接; `folia.sh status` 看基座层 |
+| 数据源页报"FreshRSS 未配置" | 同上 | 先在 配置 页填凭据 |
+| 聚类全走 Jaccard 降级 | Ollama 不可达 | 本机 `ollama serve` + `ollama pull bge-m3`(容器经 host.docker.internal 调) |
+| 面板起不来 / 构建失败 | 拉基础镜像网络瞬断 | 重试 `./scripts/folia.sh start` |
 
-查 Neon 数据：
+## 7. 本地开发
+
 ```bash
-export DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
-python -c "import os,psycopg;print(psycopg.connect(os.environ['DATABASE_URL']).execute('SELECT count(*) FROM stories WHERE active').fetchone())"
+./scripts/folia.sh install       # venv + pip install -e .
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests
+# 也可在宿主机直接起面板: PYTHONPATH=src .venv/bin/python -m folia.pipeline.cli panel
 ```

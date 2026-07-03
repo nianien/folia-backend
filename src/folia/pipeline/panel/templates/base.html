@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folia 控制面板</title>
+<style>
+  :root { --ink:#1b1714; --paper:#f4eedf; --line:#d8cdb8; --accent:#c2371d; --muted:#8a7d68; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif; }
+  header { border-bottom:2px solid var(--ink); }
+  .bar { max-width:960px; margin:0 auto; padding:14px 20px; display:flex; align-items:baseline; gap:20px; }
+  .brand { font-weight:800; letter-spacing:.05em; }
+  nav a { color:var(--muted); text-decoration:none; margin-right:16px; font-size:14px; }
+  nav a.active, nav a:hover { color:var(--accent); }
+  main { max-width:960px; margin:24px auto; padding:0 20px; }
+  h1 { font-size:22px; margin:0 0 18px; }
+  .card { background:#fffaf0; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:18px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input[type=text], input[type=password], input[type=number] {
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; font:inherit; }
+  button { font:inherit; font-weight:600; padding:9px 16px; border:1px solid var(--ink); border-radius:8px;
+    background:var(--ink); color:var(--paper); cursor:pointer; }
+  button.ghost { background:#fff; color:var(--ink); }
+  button.danger { background:#fff; color:var(--accent); border-color:var(--accent); }
+  .pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+  .on { background:#dff0d8; color:#2d6a2d; } .off { background:#f2e2e0; color:#a33; }
+  .muted { color:var(--muted); } .msg { color:#2d6a2d; font-weight:600; }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:14px; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  code { background:#efe7d6; padding:1px 5px; border-radius:4px; font-size:13px; }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <span class="brand">FOLIA 控制面板</span>
+  <nav>
+    <a href="/" >预览</a>
+    <a href="/admin" class="{{ 'active' if nav=='admin' else '' }}">控制台</a>
+    <a href="/admin/config" class="{{ 'active' if nav=='config' else '' }}">配置</a>
+    <a href="/admin/sources" class="{{ 'active' if nav=='sources' else '' }}">数据源</a>
+  </nav>
+</div></header>
+<main>{% block body %}{% endblock %}</main>
+</body>
+</html>

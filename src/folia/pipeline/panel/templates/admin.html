@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>控制台</h1>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <div>
+      循环状态：
+      {% if enabled %}<span class="pill on">运行中</span>{% else %}<span class="pill off">已暂停</span>{% endif %}
+      {% if status.busy %}<span class="muted">· 正在跑一轮…</span>{% endif %}
+    </div>
+    <div class="muted">间隔 {{ interval }}s</div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    {% if enabled %}
+      <form method="post" action="/admin/loop/stop"><button class="danger">暂停循环</button></form>
+    {% else %}
+      <form method="post" action="/admin/loop/start"><button>启动循环</button></form>
+    {% endif %}
+    <form method="post" action="/admin/loop/run"><button class="ghost">立即跑一轮</button></form>
+  </div>
+</div>
+
+<div class="card">
+  <label>最近一轮</label>
+  <div>结果：
+    {% if status.last_ok is none %}<span class="muted">尚未运行</span>
+    {% elif status.last_ok %}<span class="pill on">成功</span>
+    {% else %}<span class="pill off">失败</span>{% endif %}
+  </div>
+  <div class="muted" style="margin-top:6px">{{ status.last_message }}</div>
+  <div class="muted" style="margin-top:6px">时间：{{ status.last_run or '—' }}</div>
+</div>
+
+<p class="muted">循环每 {{ interval }}s 跑一轮（抓取→清洗→聚合，配了 DATABASE_URL 则顺带入库）。
+改间隔/凭据去 <a href="/admin/config">配置</a>；管订阅去 <a href="/admin/sources">数据源</a>。</p>
+{% endblock %}

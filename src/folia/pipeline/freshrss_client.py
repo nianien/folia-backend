@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -40,13 +39,13 @@ class FreshRSSClient:
     @classmethod
     def from_settings(cls, settings: dict[str, Any]) -> "FreshRSSClient":
         raw = settings.get("freshrss", {})
-        api_url = os.environ.get("FRESHRSS_API_URL") or raw.get("api_url")
-        user = os.environ.get("FRESHRSS_USER", "")
-        password = os.environ.get("FRESHRSS_API_PASSWORD", "")
+        api_url = raw.get("api_url")
+        user = raw.get("user", "")
+        password = raw.get("api_password", "")
         if not api_url:
-            raise FreshRSSError("FRESHRSS_API_URL is not configured")
+            raise FreshRSSError("FreshRSS API 地址未配置(面板 → 配置)")
         if not user or not password:
-            raise FreshRSSError("FRESHRSS_USER / FRESHRSS_API_PASSWORD are not set")
+            raise FreshRSSError("FreshRSS 用户名/密码未配置(面板 → 配置)")
         return cls(
             FreshRSSConfig(
                 api_url=api_url.rstrip("/"),
@@ -109,6 +108,35 @@ class FreshRSSClient:
                 data=body,
                 headers=self._auth_header(),
             )
+
+    def list_subscriptions(self) -> list[dict]:
+        url = f"{self.config.api_url}/reader/api/0/subscription/list?output=json"
+        data = json.loads(self._request(url, headers=self._auth_header()))
+        return data.get("subscriptions", [])
+
+    def add_subscription(self, feed_url: str) -> dict:
+        token = self._get_token()
+        body = urllib.parse.urlencode({"quickadd": feed_url, "T": token}).encode("utf-8")
+        raw = self._request(
+            f"{self.config.api_url}/reader/api/0/subscription/quickadd",
+            data=body,
+            headers=self._auth_header(),
+        )
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {"raw": raw}
+
+    def remove_subscription(self, stream_id: str) -> None:
+        token = self._get_token()
+        body = urllib.parse.urlencode(
+            {"s": stream_id, "ac": "unsubscribe", "T": token}
+        ).encode("utf-8")
+        self._request(
+            f"{self.config.api_url}/reader/api/0/subscription/edit",
+            data=body,
+            headers=self._auth_header(),
+        )
 
     def _auth_header(self) -> dict[str, str]:
         if self._auth is None:

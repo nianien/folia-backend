@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import urllib.error
 import urllib.request
 from array import array
@@ -23,7 +22,7 @@ class EmbeddingConfig:
     @classmethod
     def from_settings(cls, settings: dict[str, Any]) -> "EmbeddingConfig":
         raw = settings.get("embeddings", {})
-        url = os.environ.get("OLLAMA_URL") or raw.get("url", "http://localhost:11434")
+        url = str(raw.get("url", "http://localhost:11434"))
         return cls(
             url=url.rstrip("/"),
             model=str(raw.get("model", "bge-m3")),

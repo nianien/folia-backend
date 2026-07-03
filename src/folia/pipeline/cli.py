@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -22,8 +21,6 @@ from .viewer import serve
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="folia-pipeline")
-    parser.add_argument("--settings", default="config/settings.toml")
-    parser.add_argument("--sources", default="config/sources.toml")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-db")
     sub.add_parser("run-once")
@@ -33,6 +30,9 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
+    panel_parser = sub.add_parser("panel")
+    panel_parser.add_argument("--host", default="127.0.0.1")
+    panel_parser.add_argument("--port", type=int, default=8000)
     export_parser = sub.add_parser("export")
     export_parser.add_argument("--out", default="data/frontpage.json")
     load_parser = sub.add_parser("load")
@@ -43,14 +43,14 @@ def main(argv: list[str] | None = None) -> int:
     fixture.add_argument("feed_path")
     args = parser.parse_args(argv)
 
-    settings = load_settings(args.settings)
-    conn = open_database(settings)
+    conn = open_database()               # db 路径是唯一引导项
+    settings = load_settings(conn)        # 其余配置从 db 读
 
     if args.command == "init-db":
         print("database initialized")
         return 0
     if args.command == "run-once":
-        return run_once(conn, args.sources, settings)
+        return run_once(conn, settings)
     if args.command == "extract-pending":
         print(f"extracted {extract_pending(conn, settings)} articles")
         return 0
@@ -65,9 +65,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"exported {count} stories to {args.out}")
         return 0
     if args.command == "load":
-        dsn = os.environ.get("DATABASE_URL")
+        dsn = settings.get("database", {}).get("url")
         if not dsn:
-            print("DATABASE_URL is not set", file=sys.stderr)
+            print("database.url 未配置(面板 → 配置)", file=sys.stderr)
             return 2
         from .store.loader import load as load_stories  # lazy: only this cmd needs psycopg
 
@@ -76,24 +76,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "serve":
         conn.close()
-        serve(database_path(settings), args.host, args.port)
+        serve(database_path(), args.host, args.port)
+        return 0
+    if args.command == "panel":
+        conn.close()  # 面板/循环各自开连接
+        import uvicorn
+
+        from .panel.app import create_app
+
+        app = create_app(database_path())
+        uvicorn.run(app, host=args.host, port=args.port)
         return 0
     if args.command == "inspect-cluster":
         inspect_cluster(conn, args.cluster_id)
         return 0
     if args.command == "ingest-fixture":
-        return ingest_fixture(conn, args.sources, Path(args.feed_path), settings)
+        return ingest_fixture(conn, Path(args.feed_path), settings)
     return 1
 
 
-def open_database(settings: dict) -> sqlite3.Connection:
-    conn = connect(database_path(settings))
+def open_database() -> sqlite3.Connection:
+    conn = connect(database_path())
     init_db(conn)
     return conn
 
 
-def run_once(conn: sqlite3.Connection, sources_path: str, settings: dict) -> int:
-    source_map = load_source_map(sources_path)
+def run_once(conn: sqlite3.Connection, settings: dict) -> int:
+    source_map = load_source_map(conn)
     try:
         client = FreshRSSClient.from_settings(settings)
         items = list(client.iter_unread())
@@ -113,8 +122,8 @@ def run_once(conn: sqlite3.Connection, sources_path: str, settings: dict) -> int
     return 0
 
 
-def ingest_fixture(conn: sqlite3.Connection, sources_path: str, feed_path: Path, settings: dict) -> int:
-    source_map = load_source_map(sources_path)
+def ingest_fixture(conn: sqlite3.Connection, feed_path: Path, settings: dict) -> int:
+    source_map = load_source_map(conn)
     payload = json.loads(feed_path.read_text(encoding="utf-8"))
     items = payload.get("items", []) if isinstance(payload, dict) else payload
     inserted, _ = ingest_items(conn, items, source_map)

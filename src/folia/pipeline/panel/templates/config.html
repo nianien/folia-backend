@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>配置</h1>
+{% if msg %}<div class="card msg">{{ msg }}</div>{% endif %}
+<p class="muted">配置全部存 db；改完保存，循环下一轮生效。</p>
+
+<form method="post" action="/admin/config">
+  <div class="card">
+    <label>FreshRSS API 地址</label>
+    <input type="text" name="freshrss_api_url" value="{{ s.freshrss.api_url }}"
+           placeholder="http://localhost:8080/api/greader.php">
+    <label>FreshRSS 用户名</label>
+    <input type="text" name="freshrss_user" value="{{ s.freshrss.user }}">
+    <label>FreshRSS API 密码</label>
+    <input type="password" name="freshrss_api_password" value="{{ s.freshrss.api_password }}">
+    <div class="row" style="margin-top:12px">
+      <div style="flex:1"><label>批量大小</label>
+        <input type="number" name="freshrss_batch_size" value="{{ s.freshrss.batch_size }}"></div>
+      <label style="margin-top:22px"><input type="checkbox" name="freshrss_mark_read"
+        {% if s.freshrss.mark_read %}checked{% endif %}> 拉取后标记已读</label>
+    </div>
+    <div class="muted" style="margin-top:8px">还没账号？先起基座层，浏览器开
+      <code>http://localhost:8080</code> 建账号并开 Google Reader API，再填这里。</div>
+  </div>
+
+  <div class="card">
+    <label>入库目标 DATABASE_URL（Neon，留空则只本地聚合不入库）</label>
+    <input type="text" name="database_url" value="{{ s.database.url }}" placeholder="postgres://...">
+    <label>轮询间隔（秒）</label>
+    <input type="number" name="loop_interval" min="5" value="{{ s.loop.interval }}">
+  </div>
+
+  <div class="card">
+    <label>Ollama 地址</label>
+    <input type="text" name="embeddings_url" value="{{ s.embeddings.url }}" placeholder="http://localhost:11434">
+    <label>Embedding 模型</label>
+    <input type="text" name="embeddings_model" value="{{ s.embeddings.model }}">
+    <div class="row" style="margin-top:12px">
+      <div style="flex:1"><label>聚类阈值(余弦, 主路径)</label>
+        <input type="text" name="dedupe_same_event_threshold" value="{{ s.dedupe.same_event_threshold }}"></div>
+      <div style="flex:1"><label>Jaccard 阈值(降级)</label>
+        <input type="text" name="dedupe_jaccard_threshold" value="{{ s.dedupe.jaccard_threshold }}"></div>
+    </div>
+    <label>综述模型 provider</label>
+    <input type="text" name="model_provider" value="{{ s.model.provider }}"
+           placeholder="heuristic / openai / claude / gemini / xinapi">
+  </div>
+
+  <div class="row">
+    <button type="submit">保存</button>
+    <button type="submit" formaction="/admin/config/test" formmethod="post" class="ghost">测试 FreshRSS 连接</button>
+  </div>
+</form>
+{% endblock %}

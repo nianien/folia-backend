@@ -10,6 +10,20 @@ from .text import content_hash, normalize_url, stable_id
 SCHEMA = """
 PRAGMA journal_mode=WAL;
 
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS source_map (
+  match_type TEXT NOT NULL,   -- 'stream_id' | 'title'
+  match_key TEXT NOT NULL,
+  name TEXT,
+  tier TEXT,
+  category TEXT,
+  PRIMARY KEY (match_type, match_key)
+);
+
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

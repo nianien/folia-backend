@@ -3,11 +3,9 @@
 #   fulltextrss FiveFilters Full-Text RSS,全文抽取后端
 #   freshrss    订阅管理 + 拉取调度,暴露 Google Reader API;调用 fulltextrss 取全文
 #
-# pipeline 服务: 容器化常驻, 每 PIPELINE_INTERVAL 秒自动跑一轮(抓取→清洗→聚合→入库)。
-#   - 经 compose 网络读 FreshRSS(http://freshrss/...)
-#   - 经 host.docker.internal 调宿主机 Ollama(bge-m3, 仍在本机: ollama pull bge-m3)
-#   - data/ bind-mount 宿主机, SQLite 与导出产物落本地
-# 手动验证仍可用宿主机: ./scripts/folia.sh run / publish。
+# panel 服务: 控制面板(Web 控制台 + 应用内 pipeline 循环)。启停/间隔/凭据/数据源都在
+# 面板里(http://localhost:8000), 配置存 SQLite。经 compose 网读 FreshRSS、经
+# host.docker.internal 调宿主机 Ollama(仍在本机: ollama pull bge-m3), data/ bind-mount。
 
 services:
   rsshub:
@@ -47,23 +45,21 @@ services:
     networks:
       - frontpage_net
 
-  pipeline:
+  # 控制面板 = Web 控制台 + 应用内 pipeline 循环。启停/间隔/凭据/数据源都在面板里(存 SQLite),
+  # 所以这里不需要任何凭据环境变量 → 首次没配 FreshRSS 也能起来(去 http://localhost:8000 配)。
+  panel:
     build: .
     restart: unless-stopped
     depends_on:
       - rsshub
       - fulltextrss
       - freshrss
+    ports:
+      - "8000:8000"
     environment:
-      # 容器内经 compose 网络读 FreshRSS(不是 localhost:8080)
+      # URL 类默认(容器网络): 面板没填时回退到这些; 面板填了以面板为准
       FRESHRSS_API_URL: http://freshrss/api/greader.php
-      FRESHRSS_USER: ${FRESHRSS_USER:?set FRESHRSS_USER in .env}
-      FRESHRSS_API_PASSWORD: ${FRESHRSS_API_PASSWORD:?set FRESHRSS_API_PASSWORD in .env}
-      # 宿主机 Ollama
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
-      # 配了就每轮入库; 留空则只本地聚合
-      DATABASE_URL: ${DATABASE_URL:-}
-      PIPELINE_INTERVAL: ${PIPELINE_INTERVAL:-1800}
     volumes:
       - ./data:/app/data        # SQLite + 导出产物落宿主机
     extra_hosts:
