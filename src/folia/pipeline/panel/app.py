@@ -2,9 +2,9 @@
 
 - 预览(/、/cluster、/article): 复用 viewer 渲染。
 - 控制台(/admin): 状态 + 启停循环 + 立即跑。
-- 配置(/admin/config): 编辑 db 配置(点分键: freshrss.* / embeddings.* / dedupe.* / model.provider /
-  database.url / loop.interval), 可测 FreshRSS 连接。
-- 数据源(/admin/sources): 管 FreshRSS 订阅 + tier/category 映射(source_map)。
+- 配置(/admin/config): 编辑 db 配置(embeddings.* / dedupe.* / model.provider / database.url /
+  loop.interval)。FreshRSS 为内嵌固定账号, 不在此配置。
+- 数据源(/admin/sources): 管订阅源(本地 feed 表) + tier/category 映射(source_map)。
 配置全部在 db; 循环由应用内 PipelineRunner 后台线程负责。
 """
 from __future__ import annotations
@@ -23,7 +23,6 @@ from fastapi.templating import Jinja2Templates
 from .. import viewer as viewer_mod
 from ..config import is_pg_dsn, load_settings
 from ..db import connect
-from ..freshrss_client import FreshRSSClient, FreshRSSError
 from . import settings as cfg_store
 from .runner import PipelineRunner
 
@@ -66,9 +65,6 @@ def create_app(db_path: Path) -> FastAPI:
 
     def db():
         return connect(db_path)
-
-    def client(conn) -> FreshRSSClient:
-        return FreshRSSClient.from_settings(load_settings(conn))
 
     # ---------- 预览(复用 viewer) ----------
     def _preview(path: str) -> HTMLResponse:
@@ -137,11 +133,6 @@ def create_app(db_path: Path) -> FastAPI:
 
     @app.post("/admin/config")
     def config_post(
-        freshrss_api_url: str = Form(""),
-        freshrss_user: str = Form(""),
-        freshrss_api_password: str = Form(""),
-        freshrss_batch_size: str = Form("100"),
-        freshrss_mark_read: str = Form(""),
         embeddings_url: str = Form(""),
         embeddings_model: str = Form("bge-m3"),
         dedupe_same_event_threshold: str = Form("0.85"),
@@ -151,10 +142,6 @@ def create_app(db_path: Path) -> FastAPI:
         loop_interval: str = Form("1800"),
     ):
         values = {
-            "freshrss.api_url": freshrss_api_url,
-            "freshrss.user": freshrss_user,
-            "freshrss.batch_size": freshrss_batch_size,
-            "freshrss.mark_read": "1" if freshrss_mark_read else "0",
             "embeddings.url": embeddings_url,
             "embeddings.model": embeddings_model,
             "dedupe.same_event_threshold": dedupe_same_event_threshold,
@@ -162,10 +149,8 @@ def create_app(db_path: Path) -> FastAPI:
             "model.provider": model_provider,
             "loop.interval": loop_interval,
         }
-        # 密钥类: 写入型——留空则保持不变, 不回显; DATABASE_URL 填 'none' 显式清空
+        # DATABASE_URL: 写入型——留空保持不变, 填 'none' 显式清空
         note = "已保存 ✓"
-        if freshrss_api_password:
-            values["freshrss.api_password"] = freshrss_api_password
         if database_url:
             dsn = database_url.strip()
             if dsn.lower() == "none":
@@ -180,78 +165,46 @@ def create_app(db_path: Path) -> FastAPI:
         runner.notify()
         return RedirectResponse("/admin/config?msg=" + quote(note), status_code=303)
 
-    @app.post("/admin/config/test")
-    def config_test():
-        conn = db()
-        try:
-            client(conn).login()
-            msg = "FreshRSS 连接成功 ✓"
-        except Exception as exc:
-            msg = f"连接失败: {exc}"
-        finally:
-            conn.close()
-        return RedirectResponse("/admin/config?msg=" + quote(msg), status_code=303)
-
-    # ---------- 数据源 ----------
+    # ---------- 数据源(本地 feed 表就是真身, 无账号/无 API) ----------
     @app.get("/admin/sources", response_class=HTMLResponse)
     def sources_get(request: Request, msg: str = ""):
         conn = db()
-        subs: list[dict] = []
-        error = ""
-        try:
-            subs = client(conn).list_subscriptions()
-        except Exception as exc:
-            error = str(exc)
+        feeds = cfg_store.list_feeds(conn)
         mappings = cfg_store.list_source_map(conn)
         conn.close()
         return templates.TemplateResponse(
             request,
             "sources.html",
-            {"nav": "sources", "subs": subs, "mappings": mappings, "error": error, "msg": msg},
+            {"nav": "sources", "feeds": feeds, "mappings": mappings, "msg": msg},
         )
 
     @app.post("/admin/sources/add")
-    def sources_add(feed_url: str = Form(...)):
+    def sources_add(
+        feed_url: str = Form(...),
+        title: str = Form(""),
+        tier: str = Form(""),
+        category: str = Form(""),
+    ):
         conn = db()
-        try:
-            client(conn).add_subscription(feed_url.strip())
-            msg = "已添加 ✓"
-        except Exception as exc:
-            msg = f"失败: {exc}"
-        finally:
-            conn.close()
-        return RedirectResponse("/admin/sources?msg=" + quote(msg), status_code=303)
+        cfg_store.add_feed(conn, feed_url.strip(), title.strip(), tier.strip(), category.strip())
+        conn.close()
+        return RedirectResponse("/admin/sources?msg=" + quote("已添加 ✓"), status_code=303)
 
     @app.post("/admin/sources/remove")
-    def sources_remove(stream_id: str = Form(...)):
+    def sources_remove(url: str = Form(...)):
         conn = db()
-        try:
-            client(conn).remove_subscription(stream_id)
-            msg = "已删除 ✓"
-        except Exception as exc:
-            msg = f"失败: {exc}"
-        finally:
-            conn.close()
-        return RedirectResponse("/admin/sources?msg=" + quote(msg), status_code=303)
+        cfg_store.remove_feed(conn, url)
+        conn.close()
+        return RedirectResponse("/admin/sources?msg=" + quote("已删除 ✓"), status_code=303)
 
     @app.post("/admin/sources/import-seed")
     def sources_import():
         conn = db()
-        added = 0
-        try:
-            cl = client(conn)
-            for feed in cfg_store.list_feed_seed(conn):
-                try:
-                    cl.add_subscription(feed["url"])
-                    added += 1
-                except Exception:
-                    pass
-            msg = f"导入默认订阅 {added} 个"
-        except Exception as exc:
-            msg = f"失败: {exc}"
-        finally:
-            conn.close()
-        return RedirectResponse("/admin/sources?msg=" + quote(msg), status_code=303)
+        added = cfg_store.import_default_feeds(conn)
+        conn.close()
+        return RedirectResponse(
+            "/admin/sources?msg=" + quote(f"导入默认订阅 +{added}"), status_code=303
+        )
 
     # tier/category 映射
     @app.post("/admin/sources/map/add")

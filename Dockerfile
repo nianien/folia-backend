@@ -6,6 +6,7 @@ WORKDIR /app
 
 # 运行期依赖(不 pip install 本包, 避免 site-packages 破坏 ROOT 路径)
 RUN pip install --no-cache-dir \
+    'feedparser>=6.0' 'trafilatura>=1.12' \
     'psycopg[binary]>=3.2.10' 'fastapi>=0.115' 'uvicorn[standard]>=0.34' \
     'jinja2>=3.1' 'python-multipart>=0.0.9'
 

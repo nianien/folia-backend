@@ -70,7 +70,7 @@ class PipelineRunner:
         try:
             code = run_once(conn, settings)
             if code != 0:
-                raise RuntimeError("FreshRSS 拉取失败(检查凭据 / 基座层是否在跑)")
+                raise RuntimeError("抓取失败(检查数据源 / 网络)")
             message = "run-once 完成"
             dsn = settings.get("database", {}).get("url")
             if dsn:

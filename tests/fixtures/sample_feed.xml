@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Wire</title>
+    <link>https://sample.example/</link>
+    <description>Test feed for the poller</description>
+    <item>
+      <title>Central bank raises interest rates by 25 basis points</title>
+      <link>https://sample.example/rates</link>
+      <guid>sample-rates-001</guid>
+      <pubDate>Tue, 06 Jan 2026 09:00:00 GMT</pubDate>
+      <description>The central bank raised interest rates by a quarter point on Tuesday, citing persistent inflation pressure across the economy.</description>
+    </item>
+    <item>
+      <title>Coastal storm forces thousands to evacuate</title>
+      <link>https://sample.example/storm</link>
+      <guid>sample-storm-002</guid>
+      <pubDate>Tue, 06 Jan 2026 10:30:00 GMT</pubDate>
+      <description>A powerful coastal storm made landfall overnight, forcing thousands of residents to evacuate low-lying areas as authorities warned of flooding.</description>
+    </item>
+  </channel>
+</rss>

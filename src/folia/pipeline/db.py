@@ -24,10 +24,16 @@ CREATE TABLE IF NOT EXISTS source_map (
   PRIMARY KEY (match_type, match_key)
 );
 
-CREATE TABLE IF NOT EXISTS feed_seed (
-  url TEXT PRIMARY KEY,        -- 订阅种子(原 OPML): 面板"导入默认订阅"用
+CREATE TABLE IF NOT EXISTS feed (
+  url TEXT PRIMARY KEY,        -- 订阅源(本地即真身): 自写轮询器直接抓这些
   title TEXT,
-  category TEXT
+  tier TEXT,
+  category TEXT,
+  etag TEXT,                   -- 上轮响应 ETag, 下轮条件请求(省带宽/挡未变)
+  modified TEXT,               -- 上轮 Last-Modified
+  last_fetched_at TEXT,
+  last_status TEXT,            -- 'ok: +N' | 'error: ...'
+  enabled INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -109,6 +115,21 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def seed_default_feeds(conn: sqlite3.Connection) -> int:
+    """feed 表为空时播种内置默认订阅(config.DEFAULT_FEEDS)。返回播种条数。"""
+    if conn.execute("SELECT COUNT(*) FROM feed").fetchone()[0]:
+        return 0
+    from .config import DEFAULT_FEEDS
+
+    for url, title, tier, category in DEFAULT_FEEDS:
+        conn.execute(
+            "INSERT OR IGNORE INTO feed (url, title, tier, category) VALUES (?,?,?,?)",
+            (url, title, tier, category),
+        )
+    conn.commit()
+    return len(DEFAULT_FEEDS)
+
+
 def upsert_source(
     conn: sqlite3.Connection,
     source_id: str,
@@ -116,7 +137,7 @@ def upsert_source(
     tier: str,
     category: str | None = None,
 ) -> None:
-    """Register a FreshRSS feed observed during ingest, so the viewer can list it."""
+    """Register a feed observed during ingest, so the viewer can list it."""
     conn.execute(
         """
         INSERT INTO sources (id, name, url, tier, category_hint, enabled, last_fetched_at)

@@ -1,64 +1,29 @@
-# 基座层(零开发,现成开源组件):
-#   rsshub      给没有 RSS 的站造源(公众号/微博/晚点等)
-#   fulltextrss FiveFilters Full-Text RSS,全文抽取后端
-#   freshrss    订阅管理 + 拉取调度,暴露 Google Reader API;调用 fulltextrss 取全文
-#
-# panel 服务: 控制面板(Web 控制台 + 应用内 pipeline 循环)。启停/间隔/凭据/数据源都在
-# 面板里(http://localhost:8000), 配置存 SQLite。经 compose 网读 FreshRSS、经
-# host.docker.internal 调宿主机 Ollama(仍在本机: ollama pull bge-m3), data/ bind-mount。
+# rsshub: 给没有原生 RSS 的站造源(公众号/微博/晚点等)。纯 URL, 无账号。
+#   自写轮询器(poller)直接抓 rsshub 的输出; 抓取/去重/全文都在 panel 应用内, 无外部服务。
+# panel: 控制面板(Web 控制台 + 应用内 pipeline 循环)。启停/间隔/配置/数据源都在
+#   面板里(http://localhost:8000), 配置存 SQLite。经 host.docker.internal 调宿主机
+#   Ollama(ollama pull bge-m3), data/ bind-mount。
 
 services:
   rsshub:
     image: diygod/rsshub:latest
     restart: unless-stopped
     ports:
-      - "1200:1200"
+      - "127.0.0.1:1200:1200"   # 只绑回环; poller 在 compose 网内经 rsshub:1200 访问
     environment:
       NODE_ENV: production
       CACHE_TYPE: memory
     networks:
       - frontpage_net
 
-  fulltextrss:
-    image: heussd/fivefilters-full-text-rss:latest
-    restart: unless-stopped
-    ports:
-      - "8081:80"
-    networks:
-      - frontpage_net
-
-  freshrss:
-    image: freshrss/freshrss:latest
-    restart: unless-stopped
-    depends_on:
-      - rsshub
-      - fulltextrss
-    ports:
-      - "8080:80"
-    environment:
-      TZ: ${TZ:-Australia/Sydney}
-      # FreshRSS 内置拉取调度(分钟),错开整点
-      CRON_MIN: "3,33"
-    volumes:
-      # 宿主机 bind-mount(不用 docker 命名卷): 数据落本地, docker 销毁不丢
-      - ./data/freshrss:/var/www/FreshRSS/data
-    networks:
-      - frontpage_net
-
-  # 控制面板 = Web 控制台 + 应用内 pipeline 循环。启停/间隔/凭据/数据源都在面板里(存 SQLite),
-  # 所以这里不需要任何凭据环境变量 → 首次没配 FreshRSS 也能起来(去 http://localhost:8000 配)。
   panel:
     build: .
     restart: unless-stopped
     depends_on:
       - rsshub
-      - fulltextrss
-      - freshrss
     ports:
       - "127.0.0.1:8000:8000"   # 只绑回环, 不暴露到局域网
     environment:
-      # URL 类默认(容器网络): 面板没填时回退到这些; 面板填了以面板为准
-      FRESHRSS_API_URL: http://freshrss/api/greader.php
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
     volumes:
       - ./data:/app/data        # SQLite + 导出产物落宿主机

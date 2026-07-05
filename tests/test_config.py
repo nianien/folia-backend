@@ -32,16 +32,16 @@ class ConfigDbTest(unittest.TestCase):
                 "dedupe.same_event_threshold": "0.9",  # float
                 "loop.enabled": "1",                   # bool
                 "loop.interval": "600",                # int
-                "freshrss.user": "bob",                # str
-                "freshrss.mark_read": "yes",           # bool
+                "embeddings.model": "custom-embed",    # str
+                "poller.timeout_seconds": "45",        # int
             },
         )
         s = load_settings(conn)
         self.assertEqual(s["dedupe"]["same_event_threshold"], 0.9)
         self.assertIs(s["loop"]["enabled"], True)
         self.assertEqual(s["loop"]["interval"], 600)
-        self.assertEqual(s["freshrss"]["user"], "bob")
-        self.assertIs(s["freshrss"]["mark_read"], True)
+        self.assertEqual(s["embeddings"]["model"], "custom-embed")
+        self.assertEqual(s["poller"]["timeout_seconds"], 45)
 
     def test_bad_int_falls_back_to_default(self) -> None:
         conn = self._db()
@@ -65,14 +65,18 @@ class ConfigDbTest(unittest.TestCase):
         store.delete_source_map(conn, "title", "X")
         self.assertEqual(len(store.list_source_map(conn)), 0)
 
-    def test_feed_seed_falls_back_to_defaults_then_uses_table(self) -> None:
+    def test_feed_seed_and_crud(self) -> None:
+        from folia.pipeline.db import seed_default_feeds
+
         conn = self._db()
-        self.assertEqual(len(store.list_feed_seed(conn)), 6)  # empty table → DEFAULT_FEEDS
-        conn.execute("INSERT INTO feed_seed(url,title,category) VALUES('u','t','c')")
-        conn.commit()
-        rows = store.list_feed_seed(conn)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["url"], "u")
+        self.assertEqual(store.list_feeds(conn), [])          # 初始空
+        self.assertEqual(seed_default_feeds(conn), 6)         # 播种默认
+        self.assertEqual(len(store.list_feeds(conn)), 6)
+        self.assertEqual(seed_default_feeds(conn), 0)         # 非空不重播
+        store.add_feed(conn, "https://x.example/rss", "X", "wire", "tech")
+        self.assertEqual(len(store.list_feeds(conn)), 7)
+        store.remove_feed(conn, "https://x.example/rss")
+        self.assertEqual(len(store.list_feeds(conn)), 6)
 
     def test_is_pg_dsn(self) -> None:
         self.assertTrue(is_pg_dsn("postgres://user@host/db"))

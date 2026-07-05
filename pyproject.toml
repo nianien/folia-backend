@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "Folia data pipeline: crawl, clean, aggregate, and store news into Postgres"
 requires-python = ">=3.11"
 dependencies = [
+    "feedparser>=6.0",           # 抓取: 解析 RSS/Atom 订阅源(自写轮询器)
+    "trafilatura>=1.12",         # 抓取: 从文章 URL 抽取净化全文
     "psycopg[binary]>=3.2.10",   # 入库: 写聚合结果到 Postgres(Neon)
     "fastapi>=0.115",            # 控制面板
     "uvicorn[standard]>=0.34",   # 控制面板 ASGI 服务器

@@ -2,41 +2,50 @@
 {% block body %}
 <h1>数据源</h1>
 {% if msg %}<div class="card msg">{{ msg }}</div>{% endif %}
-{% if error %}<div class="card" style="color:#a33">{{ error }}</div>{% endif %}
 
-<h2 style="font-size:16px">FreshRSS 订阅</h2>
+<h2 style="font-size:16px">订阅源</h2>
 <div class="card">
-  <form method="post" action="/admin/sources/add" class="row">
-    <input type="text" name="feed_url" placeholder="订阅源 URL（可用 fulltextrss 包装后的地址）" style="flex:1">
-    <button type="submit">添加订阅</button>
+  <form method="post" action="/admin/sources/add">
+    <div class="row">
+      <input type="text" name="feed_url" placeholder="RSS/Atom 源 URL" style="flex:2">
+      <input type="text" name="title" placeholder="显示名（可空）" style="flex:1">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" name="tier" placeholder="tier(wire/broadsheet/interest/cn)" style="flex:1">
+      <input type="text" name="category" placeholder="category(international/tech/china/...)" style="flex:1">
+      <button type="submit">添加</button>
+    </div>
   </form>
   <form method="post" action="/admin/sources/import-seed" style="margin-top:10px">
     <button class="ghost" type="submit">导入默认订阅</button>
   </form>
 </div>
 <div class="card">
-  {% if subs %}
+  {% if feeds %}
   <table>
-    <thead><tr><th>标题</th><th>Feed URL</th><th></th></tr></thead>
+    <thead><tr><th>标题</th><th>Feed URL</th><th>tier</th><th>category</th><th>上次抓取</th><th></th></tr></thead>
     <tbody>
-    {% for sub in subs %}
+    {% for f in feeds %}
       <tr>
-        <td>{{ sub.title }}</td>
-        <td class="muted"><code>{{ sub.url }}</code></td>
+        <td>{{ f.title or '—' }}</td>
+        <td class="muted"><code>{{ f.url }}</code></td>
+        <td>{{ f.tier or '—' }}</td>
+        <td>{{ f.category or '—' }}</td>
+        <td class="muted">{{ f.last_status or '未抓取' }}</td>
         <td><form method="post" action="/admin/sources/remove">
-          <input type="hidden" name="stream_id" value="{{ sub.id }}">
+          <input type="hidden" name="url" value="{{ f.url }}">
           <button class="danger" type="submit">删除</button></form></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p class="muted">还没有订阅（或 FreshRSS 未配置）。先在 <a href="/admin/config">配置</a> 填凭据并测连接。</p>
+  <p class="muted">还没有订阅源。点「导入默认订阅」或在上面添加一个 RSS 地址。</p>
   {% endif %}
 </div>
 
 <h2 style="font-size:16px">tier / category 映射</h2>
-<p class="muted">给来源打 tier/category（供聚类与排序用）。按 stream_id（如 <code>feed/3</code>）或标题匹配。</p>
+<p class="muted">给来源打 tier/category（供聚类与排序用）。按标题或源 URL 匹配。</p>
 <div class="card">
   <form method="post" action="/admin/sources/map/add">
     <div class="row">

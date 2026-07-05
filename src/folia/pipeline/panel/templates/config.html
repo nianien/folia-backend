@@ -6,25 +6,6 @@
 
 <form method="post" action="/admin/config">
   <div class="card">
-    <label>FreshRSS API 地址</label>
-    <input type="text" name="freshrss_api_url" value="{{ s.freshrss.api_url }}"
-           placeholder="http://localhost:8080/api/greader.php">
-    <label>FreshRSS 用户名</label>
-    <input type="text" name="freshrss_user" value="{{ s.freshrss.user }}">
-    <label>FreshRSS API 密码</label>
-    <input type="password" name="freshrss_api_password" value=""
-           placeholder="{{ '已设置 ······（留空则不改）' if s.freshrss.api_password else '未设置' }}">
-    <div class="row" style="margin-top:12px">
-      <div style="flex:1"><label>批量大小</label>
-        <input type="number" name="freshrss_batch_size" value="{{ s.freshrss.batch_size }}"></div>
-      <label style="margin-top:22px"><input type="checkbox" name="freshrss_mark_read"
-        {% if s.freshrss.mark_read %}checked{% endif %}> 拉取后标记已读</label>
-    </div>
-    <div class="muted" style="margin-top:8px">还没账号？先起基座层，浏览器开
-      <code>http://localhost:8080</code> 建账号并开 Google Reader API，再填这里。</div>
-  </div>
-
-  <div class="card">
     <label>入库目标 DATABASE_URL（Neon，含密码，写入后不回显）</label>
     <input type="password" name="database_url" value=""
            placeholder="{{ '已设置 ······（留空则不改; 清空请填 none）' if s.database.url else '未设置（留空=只本地聚合不入库）' }}">
@@ -50,7 +31,6 @@
 
   <div class="row">
     <button type="submit">保存</button>
-    <button type="submit" formaction="/admin/config/test" formmethod="post" class="ghost">测试 FreshRSS 连接</button>
   </div>
 </form>
 {% endblock %}

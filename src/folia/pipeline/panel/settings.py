@@ -1,7 +1,8 @@
 """面板对 db 配置的读写。
 
-- settings 表: 点分键(如 freshrss.api_url / dedupe.same_event_threshold / loop.interval),
+- settings 表: 点分键(如 embeddings.url / dedupe.same_event_threshold / loop.interval),
   由 config.load_settings 还原成嵌套 dict。这里只做 get / set_many。
+- feed 表: 订阅源(本地即真身, 轮询器直接抓)。
 - source_map 表: 数据源的 tier/category 映射(面板"数据源"页管理)。
 """
 from __future__ import annotations
@@ -59,11 +60,52 @@ def delete_source_map(conn: sqlite3.Connection, match_type: str, match_key: str)
     conn.commit()
 
 
-def list_feed_seed(conn: sqlite3.Connection) -> list[dict]:
-    """订阅种子: db feed_seed 表, 表空则回退到代码内置默认(config.DEFAULT_FEEDS)。"""
-    rows = list(conn.execute("SELECT url, title, category FROM feed_seed ORDER BY category, title"))
-    if not rows:
-        from ..config import DEFAULT_FEEDS
+def list_feeds(conn: sqlite3.Connection) -> list[dict]:
+    """订阅源列表(feed 表就是真身)。"""
+    return [
+        {
+            "url": r[0],
+            "title": r[1],
+            "tier": r[2],
+            "category": r[3],
+            "last_status": r[4],
+            "last_fetched_at": r[5],
+            "enabled": bool(r[6]),
+        }
+        for r in conn.execute(
+            "SELECT url, title, tier, category, last_status, last_fetched_at, enabled "
+            "FROM feed ORDER BY category, title"
+        )
+    ]
 
-        return [{"url": u, "title": t, "category": c} for (u, t, c) in DEFAULT_FEEDS]
-    return [{"url": r[0], "title": r[1], "category": r[2]} for r in rows]
+
+def add_feed(
+    conn: sqlite3.Connection, url: str, title: str = "", tier: str = "", category: str = ""
+) -> None:
+    conn.execute(
+        "INSERT INTO feed (url, title, tier, category) VALUES (?,?,?,?) "
+        "ON CONFLICT(url) DO UPDATE SET title=excluded.title, tier=excluded.tier, "
+        "category=excluded.category",
+        (url, title, tier, category),
+    )
+    conn.commit()
+
+
+def remove_feed(conn: sqlite3.Connection, url: str) -> None:
+    conn.execute("DELETE FROM feed WHERE url=?", (url,))
+    conn.commit()
+
+
+def import_default_feeds(conn: sqlite3.Connection) -> int:
+    """把内置默认订阅(config.DEFAULT_FEEDS)并入 feed 表(已存在的跳过)。返回新增数。"""
+    from ..config import DEFAULT_FEEDS
+
+    added = 0
+    for url, title, tier, category in DEFAULT_FEEDS:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO feed (url, title, tier, category) VALUES (?,?,?,?)",
+            (url, title, tier, category),
+        )
+        added += cur.rowcount
+    conn.commit()
+    return added

@@ -2,8 +2,8 @@
 
 - 只有 db 路径是引导项(env FOLIA_DB_PATH 或默认), 因为读 db 前得先知道 db 在哪。
 - 其余运行期配置: 内置默认(_defaults) + db `settings` 表的点分键覆盖 → 还原成既有的嵌套 dict,
-  消费者(freshrss_client / embeddings / dedupe / model_client)照旧读 dict, 不用改读法。
-- URL 类默认读环境变量(容器用 compose env: freshrss / host.docker.internal; 宿主用 localhost)。
+  消费者(poller / embeddings / dedupe / model_client)照旧读 dict, 不用改读法。
+- URL 类默认读环境变量(容器用 compose env: host.docker.internal; 宿主用 localhost)。
 """
 from __future__ import annotations
 
@@ -39,28 +39,23 @@ class SourceMap:
         return SourceMeta(name=None, tier="unknown", category="uncategorized")
 
 
-# 默认订阅种子(原 subscriptions.opml): (feed_url, 显示名, 分组)。面板"导入默认订阅"用;
-# fresh 环境 feed_seed 表为空时回退到这里。URL 是经 fulltextrss 包装的全文源。
-DEFAULT_FEEDS: list[tuple[str, str, str]] = [
-    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Ffeeds.apnews.com%2Frss%2Fapf-topnews&max=20", "AP News", "Wire"),
-    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fwww.reutersagency.com%2Ffeed%2F%3Fbest-topics%3Dworld%26post_type%3Dbest&max=20", "Reuters World", "Wire"),
-    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fwww.theguardian.com%2Fworld%2Frss&max=20", "Guardian World", "Broadsheet"),
-    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml&max=20", "BBC World", "Broadsheet"),
-    ("http://fulltextrss/makefulltextfeed.php?url=https%3A%2F%2Fhnrss.org%2Ffrontpage&max=20", "Hacker News", "Interest"),
-    ("http://fulltextrss/makefulltextfeed.php?url=http%3A%2F%2Frsshub%3A1200%2Flatepost&max=20", "LatePost", "CN"),
+# 默认订阅源: (feed_url, 显示名, tier, category)。feed 表为空时播种(db.seed_default_feeds)。
+# 原始 RSS/Atom 地址(自写轮询器直接抓, 全文交给 trafilatura, 不再套 fulltextrss)。
+DEFAULT_FEEDS: list[tuple[str, str, str, str]] = [
+    ("https://feeds.apnews.com/rss/apf-topnews", "AP News", "wire", "international"),
+    ("https://www.reutersagency.com/feed/?best-topics=world&post_type=best", "Reuters World", "wire", "international"),
+    ("https://www.theguardian.com/world/rss", "Guardian World", "broadsheet", "international"),
+    ("https://feeds.bbci.co.uk/news/world/rss.xml", "BBC World", "broadsheet", "international"),
+    ("https://hnrss.org/frontpage", "Hacker News", "interest", "tech"),
+    ("http://rsshub:1200/latepost", "LatePost", "cn", "china"),
 ]
 
 
 def _defaults() -> dict[str, Any]:
     return {
         "database": {"url": os.environ.get("DATABASE_URL", "")},  # 入库目标(Neon); 空=不入库
-        "freshrss": {
-            "api_url": os.environ.get("FRESHRSS_API_URL", "http://localhost:8080/api/greader.php"),
-            "user": "",
-            "api_password": "",
-            "batch_size": 100,
-            "timeout_seconds": 30,
-            "mark_read": False,
+        "poller": {
+            "timeout_seconds": 20,  # 每个源抓取超时
         },
         "embeddings": {
             "url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),

@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sqlite3
 import sys
 from pathlib import Path
 
-from .config import database_path, load_settings, load_source_map
-from .db import connect, fetch_rows, init_db, insert_article, upsert_source
+from .config import database_path, load_settings
+from .db import connect, fetch_rows, init_db
 from .dedupe import assign_pending_articles
-from .extractor import html_to_text
+from .extractor import fetch_fulltext, html_to_text
 from .facts import facts_pending
-from .freshrss_client import FreshRSSClient, FreshRSSError, freshrss_item_to_article
 from .model_client import create_model_client
+from .poller import poll
 from .store.export import write_frontpage
 from .synthesizer import synthesize_pending
 from .text import clean_text
@@ -94,18 +93,7 @@ def open_database() -> sqlite3.Connection:
 
 
 def run_once(conn: sqlite3.Connection, settings: dict) -> int:
-    source_map = load_source_map(conn)
-    try:
-        client = FreshRSSClient.from_settings(settings)
-        items = list(client.iter_unread())
-    except FreshRSSError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-
-    inserted, inserted_ids = ingest_items(conn, items, source_map)
-    print(f"inserted {inserted} articles")
-    if settings.get("freshrss", {}).get("mark_read"):
-        client.mark_read(inserted_ids)
+    print(f"inserted {poll(conn, settings)} articles")
     print(f"extracted {extract_pending(conn, settings)} articles")
     print(f"assigned {assign_pending_articles(conn, settings)} articles to clusters")
     model_client = create_model_client(settings)
@@ -115,36 +103,26 @@ def run_once(conn: sqlite3.Connection, settings: dict) -> int:
 
 
 def ingest_fixture(conn: sqlite3.Connection, feed_path: Path, settings: dict) -> int:
-    source_map = load_source_map(conn)
-    payload = json.loads(feed_path.read_text(encoding="utf-8"))
-    items = payload.get("items", []) if isinstance(payload, dict) else payload
-    inserted, _ = ingest_items(conn, items, source_map)
-    print(f"inserted {inserted} fixture articles")
+    """离线摄取: 把本地 feed 文件当成一个源, 走轮询器解析入库(无网络)。"""
+    conn.execute(
+        "INSERT OR IGNORE INTO feed (url, title, tier, category) VALUES (?,?,?,?)",
+        (str(feed_path), "fixture", "wire", "international"),
+    )
+    conn.commit()
+    print(f"inserted {poll(conn, settings)} fixture articles")
     print(f"extracted {extract_pending(conn, settings)} articles")
     print(f"assigned {assign_pending_articles(conn, settings)} articles to clusters")
     return 0
 
 
-def ingest_items(conn: sqlite3.Connection, items: list, source_map) -> tuple[int, list[str]]:
-    inserted = 0
-    inserted_ids: list[str] = []
-    for item in items:
-        article = freshrss_item_to_article(item, source_map)
-        if article is None:
-            continue
-        upsert_source(conn, article.source_id, article.source_name, article.source_tier, article.category)
-        if insert_article(conn, article):
-            inserted += 1
-            if article.external_id:
-                inserted_ids.append(article.external_id)
-    return inserted, inserted_ids
+MIN_FULLTEXT_CHARS = 600  # entry 自带正文短于此 → 抓 URL 补全文(trafilatura)
 
 
 def extract_pending(conn: sqlite3.Connection, settings: dict) -> int:
     rows = fetch_rows(
         conn,
         """
-        SELECT id, content_html, summary
+        SELECT id, url, content_html, summary
         FROM articles
         WHERE extracted_text IS NULL
         """,
@@ -152,12 +130,19 @@ def extract_pending(conn: sqlite3.Connection, settings: dict) -> int:
     changed = 0
     for row in rows:
         text = html_to_text(row["content_html"])
-        if text:
-            status = "ok"
-        elif clean_text(row["summary"]):
-            text, status = clean_text(row["summary"]), "fallback_summary"
-        else:
-            text, status = "", "empty"
+        status = "ok"
+        if len(text) < MIN_FULLTEXT_CHARS and row["url"]:
+            try:
+                fetched = fetch_fulltext(row["url"])
+            except Exception:
+                fetched = ""
+            if len(fetched) > len(text):
+                text, status = fetched, "ok_fulltext"
+        if not text:
+            if clean_text(row["summary"]):
+                text, status = clean_text(row["summary"]), "fallback_summary"
+            else:
+                text, status = "", "empty"
         conn.execute(
             "UPDATE articles SET extracted_text=?, extract_status=? WHERE id=?",
             (text, status, row["id"]),

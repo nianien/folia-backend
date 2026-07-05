@@ -38,7 +38,18 @@ class ArticleTextParser(HTMLParser):
 
 
 def html_to_text(content_html: str | None) -> str:
-    """Convert FreshRSS full-text content HTML to plain text. No fetching."""
+    """Convert feed entry content HTML to plain text. No fetching."""
     parser = ArticleTextParser()
     parser.feed(content_html or "")
     return parser.text()
+
+
+def fetch_fulltext(url: str) -> str:
+    """抓文章 URL, 用 trafilatura 抽净化正文。取代 fulltextrss。失败返回空串。"""
+    import trafilatura
+
+    downloaded = trafilatura.fetch_url(url)
+    if not downloaded:
+        return ""
+    text = trafilatura.extract(downloaded, include_comments=False, include_tables=False)
+    return (text or "").strip()
