@@ -42,8 +42,8 @@ class SourceMap:
 # 默认订阅源: (feed_url, 显示名, tier, category)。feed 表为空时播种(db.seed_default_feeds)。
 # 原始 RSS/Atom 地址(自写轮询器直接抓, 全文交给 trafilatura, 不再套 fulltextrss)。
 DEFAULT_FEEDS: list[tuple[str, str, str, str]] = [
-    ("https://feeds.apnews.com/rss/apf-topnews", "AP News", "wire", "international"),
-    ("https://www.reutersagency.com/feed/?best-topics=world&post_type=best", "Reuters World", "wire", "international"),
+    ("http://rsshub:1200/apnews/topics/apf-topnews", "AP News", "wire", "international"),
+    ("https://www.aljazeera.com/xml/rss/all.xml", "Al Jazeera", "broadsheet", "international"),
     ("https://www.theguardian.com/world/rss", "Guardian World", "broadsheet", "international"),
     ("https://feeds.bbci.co.uk/news/world/rss.xml", "BBC World", "broadsheet", "international"),
     ("https://hnrss.org/frontpage", "Hacker News", "interest", "tech"),
