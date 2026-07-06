@@ -58,7 +58,7 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "qwen": ["qwen-plus", "qwen-turbo", "qwen-max"],
     "xinapi": ["deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3"],
-    "ollama": ["gemma3:4b", "gemma4:12b", "qwen3:4b", "qwen3:8b", "qwen3:14b", "qwen3:30b"],
+    "ollama": ["gemma3:4b", "gemma4:12b", "qwen3:4b", "qwen3:8b", "qwen3:14b"],
 }
 
 # embedding 固定本地 Ollama 的预置候选(嵌入模型, 与 chat 模型不同)。
