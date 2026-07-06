@@ -57,7 +57,7 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "gemini": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "qwen": ["qwen-plus", "qwen-turbo", "qwen-max"],
-    "xinapi": ["deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3"],
+    "xinapi": ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "gemini-2.0-flash", "gemini-1.5-pro"],
     "ollama": ["qwen3.6:35b-a3b", "qwen3:14b", "qwen3:8b", "qwen3:4b", "gemma4:12b", "gemma3:4b"],
 }
 
