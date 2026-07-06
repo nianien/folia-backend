@@ -27,10 +27,12 @@ CREATE TABLE IF NOT EXISTS feed (
 );
 
 CREATE TABLE IF NOT EXISTS directory (
-  name TEXT PRIMARY KEY,       -- 目录名(即文章 category 值); 用户维护
+  name TEXT NOT NULL,          -- 分类名; 一级即 category 一段, 二级即 "一级/二级" 后半段
+  parent TEXT NOT NULL DEFAULT '',  -- '' = 一级; 否则 = 所属一级名
   description TEXT,            -- 给分类器/人看的说明
   color TEXT,                  -- 预览页强调色
-  sort_order INTEGER NOT NULL DEFAULT 50
+  sort_order INTEGER NOT NULL DEFAULT 50,
+  PRIMARY KEY (parent, name)   -- "综合" 可挂多个一级下
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -117,23 +119,53 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """给既有库补新列(CREATE TABLE IF NOT EXISTS 不会给已存在的表加列)。幂等。"""
-    have = {r[1] for r in conn.execute("PRAGMA table_info(clusters)")}
+    """给既有库补新列/结构(CREATE TABLE IF NOT EXISTS 不动已存在的表)。幂等。"""
+    cluster_cols = {r[1] for r in conn.execute("PRAGMA table_info(clusters)")}
     for col in ("synthesis_zh", "synthesis_en"):
-        if col not in have:
+        if col not in cluster_cols:
             conn.execute(f"ALTER TABLE clusters ADD COLUMN {col} TEXT")
+
+    # directory 旧结构是扁平(主键 name, 无 parent) → 重建为两级, 旧行迁成一级
+    dir_cols = {r[1] for r in conn.execute("PRAGMA table_info(directory)")}
+    if "parent" not in dir_cols:
+        conn.execute("ALTER TABLE directory RENAME TO directory_old")
+        conn.executescript(
+            """
+            CREATE TABLE directory (
+              name TEXT NOT NULL, parent TEXT NOT NULL DEFAULT '',
+              description TEXT, color TEXT, sort_order INTEGER NOT NULL DEFAULT 50,
+              PRIMARY KEY (parent, name)
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO directory (name, parent, description, color, sort_order) "
+            "SELECT name, '', description, color, sort_order FROM directory_old"
+        )
+        conn.execute("DROP TABLE directory_old")
+        # 给每个已有一级补默认二级 "综合"
+        from .config import DEFAULT_SUBCATEGORY
+
+        tops = [r[0] for r in conn.execute("SELECT name FROM directory WHERE parent=''")]
+        for top in tops:
+            conn.execute(
+                "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
+                "SELECT ?, ?, '', color, 99 FROM directory WHERE name=? AND parent=''",
+                (DEFAULT_SUBCATEGORY, top, top),
+            )
 
 
 def seed_default_directories(conn: sqlite3.Connection) -> int:
-    """directory 表为空时播种默认目录(config.DEFAULT_DIRECTORIES)。"""
+    """directory 表为空时播种默认两级分类(config.DEFAULT_DIRECTORIES)。"""
     if conn.execute("SELECT COUNT(*) FROM directory").fetchone()[0]:
         return 0
     from .config import DEFAULT_DIRECTORIES
 
-    for name, description, color, order in DEFAULT_DIRECTORIES:
+    for name, parent, description, color, order in DEFAULT_DIRECTORIES:
         conn.execute(
-            "INSERT OR IGNORE INTO directory (name, description, color, sort_order) VALUES (?,?,?,?)",
-            (name, description, color, order),
+            "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
+            "VALUES (?,?,?,?,?)",
+            (name, parent, description, color, order),
         )
     conn.commit()
     return len(DEFAULT_DIRECTORIES)

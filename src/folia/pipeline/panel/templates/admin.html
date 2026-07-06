@@ -7,7 +7,7 @@
   <a data-tab="fetch">抓取</a>
   <a data-tab="sync">数据同步</a>
   <a data-tab="sources">数据源</a>
-  <a data-tab="directory">目录</a>
+  <a data-tab="directory">新闻分类</a>
   <a data-tab="models">模型</a>
 </div>
 
@@ -94,41 +94,58 @@
   </div>
 </div>
 
-<!-- 目录 -->
+<!-- 新闻分类(两级) -->
 <div class="tabpane" id="tab-directory">
   <div class="card">
-    <div class="hint">目录 = 新闻的分类。聚合后的新闻由模型按内容自动归入某个目录；都不匹配时归「综合」。这套目录同时决定预览页的分类标签。</div>
+    <div class="hint">两级分类:一级 + 二级。聚合后的新闻由模型按内容归到「一级/二级」;归不到具体二级时落该一级的「综合」。
+      新增一级会自动带一个「综合」二级。这套分类同时决定预览页的嵌套标签。</div>
     <form method="post" action="/admin/directory/add">
+      <input type="hidden" name="parent" value="">
       <div class="row">
-        <input type="text" name="name" placeholder="目录名（如 财经）" style="flex:1;min-width:120px">
-        <input type="text" name="description" placeholder="描述（帮模型判断该归哪些新闻）" style="flex:2;min-width:200px">
-      </div>
-      <div class="row" style="margin-top:8px">
+        <input type="text" name="name" placeholder="新增一级分类名（如 财经）" style="flex:1;min-width:140px">
+        <input type="text" name="description" placeholder="描述（帮模型判断）" style="flex:2;min-width:200px">
         <input type="color" name="color" value="#7a6f5c" title="标签颜色" style="width:48px;padding:2px">
-        <input type="number" name="sort_order" value="50" title="排序" style="max-width:100px">
-        <button>保存目录</button>
+        <input type="number" name="sort_order" value="50" title="排序" style="max-width:90px">
+        <button>加一级</button>
       </div>
     </form>
   </div>
+  {% for top in directories %}
   <div class="card">
-    {% if directories %}
-    <table>
-      <thead><tr><th>目录</th><th>描述</th><th>排序</th><th></th></tr></thead>
+    <div class="row" style="align-items:center;justify-content:space-between">
+      <b><span class="swatch" style="background:{{ top.color }}"></span>{{ top.name }}
+        <span class="muted" style="font-weight:normal">{{ top.description or '' }}</span></b>
+      <form method="post" action="/admin/directory/remove">
+        <input type="hidden" name="name" value="{{ top.name }}"><input type="hidden" name="parent" value="">
+        <button class="danger" onclick="return confirm('删除一级「{{ top.name }}」及其全部二级?')">删一级</button>
+      </form>
+    </div>
+    <table style="margin-top:8px">
       <tbody>
-      {% for d in directories %}
+      {% for sub in top.subs %}
         <tr>
-          <td><span class="swatch" style="background:{{ d.color }}"></span>{{ d.name }}</td>
-          <td class="muted">{{ d.description or '—' }}</td>
-          <td class="muted">{{ d.sort_order }}</td>
+          <td>{{ top.name }} / <b>{{ sub.name }}</b></td>
+          <td class="muted">{{ sub.description or '—' }}</td>
           <td><form method="post" action="/admin/directory/remove">
-            <input type="hidden" name="name" value="{{ d.name }}">
+            <input type="hidden" name="name" value="{{ sub.name }}"><input type="hidden" name="parent" value="{{ top.name }}">
             <button class="danger">删除</button></form></td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="muted">还没有目录。</p>{% endif %}
+    <form method="post" action="/admin/directory/add" style="margin-top:8px">
+      <input type="hidden" name="parent" value="{{ top.name }}">
+      <div class="row">
+        <input type="text" name="name" placeholder="在「{{ top.name }}」下加二级（如 AI）" style="flex:1;min-width:160px">
+        <input type="text" name="description" placeholder="描述" style="flex:2;min-width:180px">
+        <input type="hidden" name="color" value="{{ top.color }}">
+        <button class="ghost">加二级</button>
+      </div>
+    </form>
   </div>
+  {% else %}
+  <div class="card"><p class="muted">还没有分类。上面加一个一级。</p></div>
+  {% endfor %}
 </div>
 
 <!-- 模型 -->

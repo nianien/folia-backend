@@ -59,30 +59,50 @@ def remove_feed(conn: sqlite3.Connection, url: str) -> None:
 
 
 def list_directories(conn: sqlite3.Connection) -> list[dict]:
-    """分类目录(用户维护); 驱动新闻分类与预览页 tab。"""
+    """两级分类扁平表(name, parent, ...); parent='' 为一级。"""
     return [
-        {"name": r[0], "description": r[1], "color": r[2], "sort_order": r[3]}
+        {"name": r[0], "parent": r[1], "description": r[2], "color": r[3], "sort_order": r[4]}
         for r in conn.execute(
-            "SELECT name, description, color, sort_order FROM directory ORDER BY sort_order, name"
+            "SELECT name, parent, description, color, sort_order FROM directory "
+            "ORDER BY parent, sort_order, name"
         )
     ]
 
 
+def list_directory_tree(conn: sqlite3.Connection) -> list[dict]:
+    """分组成 [{一级 + subs:[二级...]}]; 驱动「新闻分类」页与预览嵌套 tab。"""
+    flat = list_directories(conn)
+    tops = [d for d in flat if not d["parent"]]
+    for top in tops:
+        top["subs"] = [d for d in flat if d["parent"] == top["name"]]
+    return tops
+
+
 def add_directory(
-    conn: sqlite3.Connection, name: str, description: str = "", color: str = "#7a6f5c",
-    sort_order: int = 50,
+    conn: sqlite3.Connection, name: str, parent: str = "", description: str = "",
+    color: str = "#7a6f5c", sort_order: int = 50,
 ) -> None:
     conn.execute(
-        "INSERT INTO directory (name, description, color, sort_order) VALUES (?,?,?,?) "
-        "ON CONFLICT(name) DO UPDATE SET description=excluded.description, "
+        "INSERT INTO directory (name, parent, description, color, sort_order) VALUES (?,?,?,?,?) "
+        "ON CONFLICT(parent, name) DO UPDATE SET description=excluded.description, "
         "color=excluded.color, sort_order=excluded.sort_order",
-        (name, description, color or "#7a6f5c", sort_order),
+        (name, parent, description, color or "#7a6f5c", sort_order),
     )
+    if not parent:  # 新增一级 → 自动补默认二级 "综合"
+        from ..config import DEFAULT_SUBCATEGORY
+
+        conn.execute(
+            "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
+            "VALUES (?,?,?,?,?)",
+            (DEFAULT_SUBCATEGORY, name, "", color or "#7a6f5c", 99),
+        )
     conn.commit()
 
 
-def remove_directory(conn: sqlite3.Connection, name: str) -> None:
-    conn.execute("DELETE FROM directory WHERE name=?", (name,))
+def remove_directory(conn: sqlite3.Connection, name: str, parent: str = "") -> None:
+    conn.execute("DELETE FROM directory WHERE name=? AND parent=?", (name, parent))
+    if not parent:  # 删一级 → 连带删其全部二级
+        conn.execute("DELETE FROM directory WHERE parent=?", (name,))
     conn.commit()
 
 

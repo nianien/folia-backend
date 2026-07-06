@@ -110,9 +110,11 @@ def categorize_pending(conn: sqlite3.Connection, settings: dict, limit: int = 40
     """给还没分类的文章按内容定目录(LLM); 每轮限量, 积压分多轮消化。"""
     from .categorize import classify
 
-    names = [r[0] for r in conn.execute("SELECT name FROM directory ORDER BY sort_order, name")]
-    if not names:
+    rows = conn.execute("SELECT name, parent FROM directory ORDER BY sort_order, name").fetchall()
+    tops = [r["name"] for r in rows if not r["parent"]]
+    if not tops:
         return 0
+    tree = [(top, [r["name"] for r in rows if r["parent"] == top]) for top in tops]
     client = create_model_client(settings, "categorize")
     if not client.enabled:
         return 0
@@ -125,7 +127,7 @@ def categorize_pending(conn: sqlite3.Connection, settings: dict, limit: int = 40
     changed = 0
     for row in rows:
         text = row["extracted_text"] or row["summary"] or ""
-        category = classify(row["title"], text, names, client)
+        category = classify(row["title"], text, tree, client)
         conn.execute("UPDATE articles SET category=? WHERE id=?", (category, row["id"]))
         changed += 1
     conn.commit()

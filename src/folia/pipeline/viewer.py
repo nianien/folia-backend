@@ -15,17 +15,23 @@ IMG_RE = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 CITE_RE = re.compile(r"\[(\d+)\]")
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 
-# 分类目录(名称→颜色, 有序)由 db 的 directory 表驱动, 每次请求刷新。
-_DIR_COLORS: dict[str, str] = {}
-_DIR_ORDER: list[str] = []
+# 两级分类由 db 的 directory 表驱动(每次请求刷新): 一级顺序 + 各一级的二级 + 一级颜色。
+# article.category 存 "一级/二级" 路径; 颜色统一取一级的。
+_DIR_COLORS: dict[str, str] = {}   # 一级名 → 颜色
+_DIR_TOPS: list[str] = []          # 一级顺序
+_DIR_SUBS: dict[str, list[str]] = {}  # 一级 → [二级...]
 _DEFAULT_COLOR = "#7a6f5c"
 
 
 def _load_directories(conn: sqlite3.Connection) -> None:
-    global _DIR_COLORS, _DIR_ORDER
-    rows = list(conn.execute("SELECT name, color FROM directory ORDER BY sort_order, name"))
-    _DIR_ORDER = [r[0] for r in rows]
-    _DIR_COLORS = {r[0]: (r[1] or _DEFAULT_COLOR) for r in rows}
+    global _DIR_COLORS, _DIR_TOPS, _DIR_SUBS
+    rows = list(conn.execute("SELECT name, parent, color FROM directory ORDER BY sort_order, name"))
+    _DIR_TOPS = [r[0] for r in rows if not r[1]]
+    _DIR_COLORS = {r[0]: (r[2] or _DEFAULT_COLOR) for r in rows if not r[1]}
+    _DIR_SUBS = {}
+    for name, parent, _color in rows:
+        if parent:
+            _DIR_SUBS.setdefault(parent, []).append(name)
 
 FONTS = (
     "https://fonts.googleapis.com/css2?"
@@ -104,7 +110,10 @@ def render_dashboard(conn: sqlite3.Connection, category: str | None) -> str:
 
     if category is not None:
         label, color = cat_meta(category)
-        scoped = [s for s in stories if s["cat"] == category]
+        if "/" in category:  # 具体二级: 精确匹配路径
+            scoped = [s for s in stories if s["cat"] == category]
+        else:  # 一级: 匹配该一级下所有二级
+            scoped = [s for s in stories if s["cat"].split("/")[0] == category]
         if not scoped:
             return shell("头版", head + '<p class="empty">该版块暂无内容。</p>')
         cards = "".join(story_card(s, i, "standard") for i, s in enumerate(scoped))
@@ -132,9 +141,10 @@ def render_dashboard(conn: sqlite3.Connection, category: str | None) -> str:
     for story in stories:
         if story["id"] in used:
             continue
-        groups.setdefault(story["cat"], []).append(story)
-    ordered = [c for c in _DIR_ORDER if c in groups] + [
-        c for c in groups if c not in _DIR_ORDER
+        top = (story["cat"] or "综合").split("/")[0]  # 首页按一级分组
+        groups.setdefault(top, []).append(story)
+    ordered = [c for c in _DIR_TOPS if c in groups] + [
+        c for c in groups if c not in _DIR_TOPS
     ]
     for cat in ordered:
         label, color = cat_meta(cat)
@@ -241,20 +251,32 @@ def section_head(label: str, color: str) -> str:
 
 
 def masthead(active: str | None, stats_line: str) -> str:
+    active_top = active.split("/")[0] if active else None
     items = [("/", "全部", None)]
-    for name in _DIR_ORDER:  # tab 由目录表驱动
+    for name in _DIR_TOPS:  # 一级 tab
         items.append((f"/?cat={urllib.parse.quote(name)}", name, name))
-    nav = "".join(
-        f'<a href="{href}" class="{"active" if active == key else ""}">{escape(label)}</a>'
+    nav = "".join(  # 一级高亮: 看该一级或其任一二级时都亮
+        f'<a href="{href}" class="{"active" if active_top == key else ""}">{escape(label)}</a>'
         for href, label, key in items
     )
+    subnav = ""
+    if active_top and _DIR_SUBS.get(active_top):  # 二级子栏
+        subitems = [(f"/?cat={urllib.parse.quote(active_top)}", "全部", active_top)]
+        for sub in _DIR_SUBS[active_top]:
+            path = f"{active_top}/{sub}"
+            subitems.append((f"/?cat={urllib.parse.quote(path)}", sub, path))
+        links = "".join(
+            f'<a href="{href}" class="{"active" if active == key else ""}">{escape(label)}</a>'
+            for href, label, key in subitems
+        )
+        subnav = f'<nav class="topnav subnav">{links}</nav>'
     return f"""
     <header class="masthead">
       <div class="edition">{escape(date_line())} · 私人头版</div>
       <div class="wordmark">头版</div>
       <div class="tagline">Frontpage Daily Briefing</div>
       <hr class="rule-d">
-      <nav class="topnav">{nav}</nav>
+      <nav class="topnav">{nav}</nav>{subnav}
       <div class="stats">{escape(stats_line)}</div>
     </header>
     """
@@ -554,9 +576,11 @@ def date_line() -> str:
 
 
 def cat_meta(category: str | None) -> tuple[str, str]:
-    """(标签, 颜色) —— category 即目录名; 标签就是名字, 颜色查目录表。"""
+    """(标签, 颜色) —— category 可能是 "一级/二级" 路径或纯一级; 标签取叶子, 颜色取一级。"""
     name = category or "综合"
-    return name, _DIR_COLORS.get(name, _DEFAULT_COLOR)
+    top, _, _sub = name.partition("/")
+    label = name.rsplit("/", 1)[-1]
+    return label, _DIR_COLORS.get(top, _DEFAULT_COLOR)
 
 
 # ---------------------------------------------------------------- shell

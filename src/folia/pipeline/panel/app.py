@@ -93,7 +93,7 @@ def create_app(db_path: Path) -> FastAPI:
         try:
             s = load_settings(conn)
             feeds = cfg_store.list_feeds(conn)
-            directories = cfg_store.list_directories(conn)
+            directories = cfg_store.list_directory_tree(conn)
         finally:
             conn.close()
         return templates.TemplateResponse(
@@ -172,10 +172,11 @@ def create_app(db_path: Path) -> FastAPI:
         conn.close()
         return _back(f"导入默认订阅 +{added}", "sources")
 
-    # 目录: 分类目录增删(驱动新闻分类与预览页 tab)
+    # 新闻分类: 两级增删(一级 parent=''; 二级 parent=所属一级)。加一级自动带默认二级 "综合"
     @app.post("/admin/directory/add")
     def directory_add(
         name: str = Form(...),
+        parent: str = Form(""),
         description: str = Form(""),
         color: str = Form("#7a6f5c"),
         sort_order: str = Form("50"),
@@ -185,16 +186,18 @@ def create_app(db_path: Path) -> FastAPI:
         except ValueError:
             order = 50
         conn = db()
-        cfg_store.add_directory(conn, name.strip(), description.strip(), color.strip(), order)
+        cfg_store.add_directory(
+            conn, name.strip(), parent.strip(), description.strip(), color.strip(), order
+        )
         conn.close()
-        return _back("目录已保存 ✓", "directory")
+        return _back("新闻分类已保存 ✓", "directory")
 
     @app.post("/admin/directory/remove")
-    def directory_remove(name: str = Form(...)):
+    def directory_remove(name: str = Form(...), parent: str = Form("")):
         conn = db()
-        cfg_store.remove_directory(conn, name)
+        cfg_store.remove_directory(conn, name.strip(), parent.strip())
         conn.close()
-        return _back("目录已删除", "directory")
+        return _back("已删除分类", "directory")
 
     # 模型: embedding 固定本地 Ollama; 其余功能各选 provider + 模型
     #       (provider 留空 = 规则/不用模型)。供应商 key/endpoint 从环境变量读, 不在页面配。
