@@ -21,8 +21,8 @@ class PollerTest(unittest.TestCase):
 
     def _add_fixture_feed(self, conn):
         conn.execute(
-            "INSERT INTO feed (url, title, tier, category) VALUES (?,?,?,?)",
-            (str(FIXTURE), "Sample Wire", "wire", "international"),
+            "INSERT INTO feed (url, name, description) VALUES (?,?,?)",
+            (str(FIXTURE), "Sample Wire", "本地样本源"),
         )
         conn.commit()
 
@@ -33,11 +33,10 @@ class PollerTest(unittest.TestCase):
         self._add_fixture_feed(conn)
         inserted = poller.poll(conn, {})
         self.assertEqual(inserted, 2)
-        rows = conn.execute("SELECT title, url, source_tier, category FROM articles").fetchall()
+        rows = conn.execute("SELECT title, source_name, category FROM articles").fetchall()
         self.assertEqual(len(rows), 2)
-        # tier/category 从 feed 行带过来
-        self.assertTrue(all(r["source_tier"] == "wire" for r in rows))
-        self.assertTrue(all(r["category"] == "international" for r in rows))
+        self.assertTrue(all(r["source_name"] == "Sample Wire" for r in rows))  # 源名来自 feed.name
+        self.assertTrue(all((r["category"] or "") == "" for r in rows))        # 分类留给 categorize_pending(LLM)
 
     def test_poll_is_idempotent(self) -> None:
         from folia.pipeline import poller

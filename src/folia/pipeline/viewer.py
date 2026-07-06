@@ -13,17 +13,19 @@ from pathlib import Path
 URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 IMG_RE = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 CITE_RE = re.compile(r"\[(\d+)\]")
-PLACEHOLDER = "unable to retrieve full-text content"
-PLACEHOLDER_BRACKET = "[unable to retrieve full-text content]"
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 
-CATEGORY_META = {
-    "international": ("国际", "#c2371d"),
-    "tech": ("科技", "#1d6f6b"),
-    "business": ("商业", "#b5762a"),
-    "uncategorized": ("综合", "#7a6f5c"),
-}
-CATEGORY_ORDER = ["international", "tech", "business", "uncategorized"]
+# 分类目录(名称→颜色, 有序)由 db 的 directory 表驱动, 每次请求刷新。
+_DIR_COLORS: dict[str, str] = {}
+_DIR_ORDER: list[str] = []
+_DEFAULT_COLOR = "#7a6f5c"
+
+
+def _load_directories(conn: sqlite3.Connection) -> None:
+    global _DIR_COLORS, _DIR_ORDER
+    rows = list(conn.execute("SELECT name, color FROM directory ORDER BY sort_order, name"))
+    _DIR_ORDER = [r[0] for r in rows]
+    _DIR_COLORS = {r[0]: (r[1] or _DEFAULT_COLOR) for r in rows}
 
 FONTS = (
     "https://fonts.googleapis.com/css2?"
@@ -72,6 +74,7 @@ def route_request(database: Path, path: str) -> tuple[int, str]:
     segments = [segment for segment in parsed.path.split("/") if segment]
     conn = connect_viewer(database)
     try:
+        _load_directories(conn)  # 目录表驱动分类颜色与 tab
         if not segments:
             return int(HTTPStatus.OK), render_dashboard(conn, category)
         if len(segments) == 2 and segments[0] == "cluster":
@@ -130,8 +133,8 @@ def render_dashboard(conn: sqlite3.Connection, category: str | None) -> str:
         if story["id"] in used:
             continue
         groups.setdefault(story["cat"], []).append(story)
-    ordered = [c for c in CATEGORY_ORDER if c in groups] + [
-        c for c in groups if c not in CATEGORY_ORDER
+    ordered = [c for c in _DIR_ORDER if c in groups] + [
+        c for c in groups if c not in _DIR_ORDER
     ]
     for cat in ordered:
         label, color = cat_meta(cat)
@@ -157,13 +160,11 @@ def collect_stories(conn: sqlite3.Connection, image_map: dict[int, str]) -> list
     for row in rows:
         title = row["title"] or ""
         synth = row["synthesized_text"] or ""
-        if PLACEHOLDER in title:
-            continue
         stories.append(
             {
                 "id": row["id"],
                 "title": title,
-                "cat": row["category"] or "uncategorized",
+                "cat": row["category"] or "综合",
                 "tier": row["tier"] or "",
                 "source_name": row["source_name"] or "",
                 "source_count": row["source_count"] or 1,
@@ -240,14 +241,11 @@ def section_head(label: str, color: str) -> str:
 
 
 def masthead(active: str | None, stats_line: str) -> str:
-    items = [
-        ("/", "全部", None),
-        ("/?cat=international", "国际", "international"),
-        ("/?cat=tech", "科技", "tech"),
-        ("/?cat=uncategorized", "综合", "uncategorized"),
-    ]
+    items = [("/", "全部", None)]
+    for name in _DIR_ORDER:  # tab 由目录表驱动
+        items.append((f"/?cat={urllib.parse.quote(name)}", name, name))
     nav = "".join(
-        f'<a href="{href}" class="{"active" if active == key else ""}">{label}</a>'
+        f'<a href="{href}" class="{"active" if active == key else ""}">{escape(label)}</a>'
         for href, label, key in items
     )
     return f"""
@@ -406,7 +404,7 @@ def render_synthesis(markdown: str) -> str:
 
 
 def format_inline(line: str) -> str:
-    escaped = escape(line.replace(PLACEHOLDER_BRACKET, "").strip())
+    escaped = escape(line.strip())
     return CITE_RE.sub(lambda m: f'<sup class="cite">{m.group(1)}</sup>', escaped)
 
 
@@ -491,7 +489,7 @@ def _first_paragraph(markdown: str, limit: int) -> str:
     if not markdown:
         return ""
     for raw_line in markdown.splitlines():
-        line = raw_line.strip().replace(PLACEHOLDER_BRACKET, "")
+        line = raw_line.strip()
         if not line or line.startswith("#") or line == "---":
             continue
         line = CITE_RE.sub("", line)
@@ -536,7 +534,9 @@ def date_line() -> str:
 
 
 def cat_meta(category: str | None) -> tuple[str, str]:
-    return CATEGORY_META.get(category or "uncategorized", ("综合", "#7a6f5c"))
+    """(标签, 颜色) —— category 即目录名; 标签就是名字, 颜色查目录表。"""
+    name = category or "综合"
+    return name, _DIR_COLORS.get(name, _DEFAULT_COLOR)
 
 
 # ---------------------------------------------------------------- shell
@@ -550,6 +550,9 @@ def shell(title: str, inner: str) -> str:
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         f'<link href="{FONTS}" rel="stylesheet">'
         f"<style>{CSS}</style></head><body>"
+        '<a href="/admin" title="设置" style="position:fixed;top:16px;right:20px;z-index:50;'
+        "text-decoration:none;font-size:13px;color:#8a7d68;background:rgba(255,250,240,.92);"
+        'border:1px solid #d8cdb8;border-radius:999px;padding:6px 14px;">⚙ 设置</a>'
         f"<main>{inner}</main>"
         '<footer class="foot">头版 · 由本地数据管道生成 · SQLite-backed</footer>'
         "</body></html>"

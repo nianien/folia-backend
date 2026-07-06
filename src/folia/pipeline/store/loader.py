@@ -4,14 +4,12 @@ Snapshot semantics: every load marks the whole table inactive, then upserts the
 current set as active. Content columns are overwritten; like_count is preserved
 across re-runs (keyed by the stable story key).
 
-Usage:
-    DATABASE_URL=postgres://... python loader.py ../data/frontpage.json
+Entry point is `load(path, dsn)`; callers (panel runner / `folia load`) read the
+dsn from the DB settings and pass it in.
 """
 from __future__ import annotations
 
 import json
-import os
-import sys
 from pathlib import Path
 
 import psycopg
@@ -51,7 +49,7 @@ def load(path: Path, dsn: str) -> tuple[int, int]:
     from ..config import is_pg_dsn
 
     if not is_pg_dsn(dsn):
-        raise ValueError("DATABASE_URL 必须是 postgres:// 连接串")
+        raise ValueError("database.url 必须是 postgres:// 连接串")
     payload = json.loads(path.read_text(encoding="utf-8"))
     stories = payload.get("stories", [])
     with psycopg.connect(dsn, autocommit=False) as conn:
@@ -83,21 +81,3 @@ def to_params(story: dict) -> dict:
         "sources": Jsonb(story.get("sources") or []),
     }
     return params
-
-
-def main(argv: list[str]) -> int:
-    path = Path(argv[1]) if len(argv) > 1 else Path("data/frontpage.json")
-    dsn = os.environ.get("DATABASE_URL")
-    if not dsn:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 2
-    if not path.exists():
-        print(f"{path} not found — run `folia-pipeline export` first", file=sys.stderr)
-        return 2
-    total, active = load(path, dsn)
-    print(f"loaded {total} stories ({active} active) into Neon")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))

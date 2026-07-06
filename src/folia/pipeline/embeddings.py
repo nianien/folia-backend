@@ -23,9 +23,10 @@ class EmbeddingConfig:
     def from_settings(cls, settings: dict[str, Any]) -> "EmbeddingConfig":
         raw = settings.get("embeddings", {})
         url = str(raw.get("url", "http://localhost:11434"))
+        model = str(settings.get("models", {}).get("embedding") or "bge-m3")
         return cls(
             url=url.rstrip("/"),
-            model=str(raw.get("model", "bge-m3")),
+            model=model,
             timeout_seconds=int(raw.get("timeout_seconds", 30)),
         )
 

@@ -15,25 +15,22 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
-CREATE TABLE IF NOT EXISTS source_map (
-  match_type TEXT NOT NULL,   -- 'stream_id' | 'title'
-  match_key TEXT NOT NULL,
-  name TEXT,
-  tier TEXT,
-  category TEXT,
-  PRIMARY KEY (match_type, match_key)
-);
-
 CREATE TABLE IF NOT EXISTS feed (
   url TEXT PRIMARY KEY,        -- 订阅源(本地即真身): 自写轮询器直接抓这些
-  title TEXT,
-  tier TEXT,
-  category TEXT,
+  name TEXT,                   -- 源名称(如 BBC World)
+  description TEXT,            -- 一句话介绍
   etag TEXT,                   -- 上轮响应 ETag, 下轮条件请求(省带宽/挡未变)
   modified TEXT,               -- 上轮 Last-Modified
   last_fetched_at TEXT,
   last_status TEXT,            -- 'ok: +N' | 'error: ...'
   enabled INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS directory (
+  name TEXT PRIMARY KEY,       -- 目录名(即文章 category 值); 用户维护
+  description TEXT,            -- 给分类器/人看的说明
+  color TEXT,                  -- 预览页强调色
+  sort_order INTEGER NOT NULL DEFAULT 50
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -113,6 +110,22 @@ def connect(path: Path) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     conn.commit()
+    seed_default_directories(conn)
+
+
+def seed_default_directories(conn: sqlite3.Connection) -> int:
+    """directory 表为空时播种默认目录(config.DEFAULT_DIRECTORIES)。"""
+    if conn.execute("SELECT COUNT(*) FROM directory").fetchone()[0]:
+        return 0
+    from .config import DEFAULT_DIRECTORIES
+
+    for name, description, color, order in DEFAULT_DIRECTORIES:
+        conn.execute(
+            "INSERT OR IGNORE INTO directory (name, description, color, sort_order) VALUES (?,?,?,?)",
+            (name, description, color, order),
+        )
+    conn.commit()
+    return len(DEFAULT_DIRECTORIES)
 
 
 def seed_default_feeds(conn: sqlite3.Connection) -> int:
@@ -121,10 +134,10 @@ def seed_default_feeds(conn: sqlite3.Connection) -> int:
         return 0
     from .config import DEFAULT_FEEDS
 
-    for url, title, tier, category in DEFAULT_FEEDS:
+    for url, name, description in DEFAULT_FEEDS:
         conn.execute(
-            "INSERT OR IGNORE INTO feed (url, title, tier, category) VALUES (?,?,?,?)",
-            (url, title, tier, category),
+            "INSERT OR IGNORE INTO feed (url, name, description) VALUES (?,?,?)",
+            (url, name, description),
         )
     conn.commit()
     return len(DEFAULT_FEEDS)

@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init-db")
     sub.add_parser("run-once")
     sub.add_parser("extract-pending")
+    sub.add_parser("categorize-pending")
     sub.add_parser("facts-pending")
     sub.add_parser("synthesize-pending")
     panel_parser = sub.add_parser("panel")
@@ -49,11 +50,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "extract-pending":
         print(f"extracted {extract_pending(conn, settings)} articles")
         return 0
+    if args.command == "categorize-pending":
+        print(f"categorized {categorize_pending(conn, settings)} articles")
+        return 0
     if args.command == "facts-pending":
-        print(f"generated facts for {facts_pending(conn, create_model_client(settings))} articles")
+        print(f"generated facts for {facts_pending(conn, create_model_client(settings, 'facts'))} articles")
         return 0
     if args.command == "synthesize-pending":
-        print(f"synthesized {synthesize_pending(conn, create_model_client(settings))} clusters")
+        print(f"synthesized {synthesize_pending(conn, create_model_client(settings, 'synthesis'))} clusters")
         return 0
     if args.command == "export":
         count = write_frontpage(conn, Path(args.out))
@@ -95,18 +99,44 @@ def open_database() -> sqlite3.Connection:
 def run_once(conn: sqlite3.Connection, settings: dict) -> int:
     print(f"inserted {poll(conn, settings)} articles")
     print(f"extracted {extract_pending(conn, settings)} articles")
+    print(f"categorized {categorize_pending(conn, settings)} articles")
     print(f"assigned {assign_pending_articles(conn, settings)} articles to clusters")
-    model_client = create_model_client(settings)
-    print(f"generated facts for {facts_pending(conn, model_client)} articles")
-    print(f"synthesized {synthesize_pending(conn, model_client)} clusters")
+    print(f"generated facts for {facts_pending(conn, create_model_client(settings, 'facts'))} articles")
+    print(f"synthesized {synthesize_pending(conn, create_model_client(settings, 'synthesis'))} clusters")
     return 0
+
+
+def categorize_pending(conn: sqlite3.Connection, settings: dict, limit: int = 40) -> int:
+    """给还没分类的文章按内容定目录(LLM); 每轮限量, 积压分多轮消化。"""
+    from .categorize import classify
+
+    names = [r[0] for r in conn.execute("SELECT name FROM directory ORDER BY sort_order, name")]
+    if not names:
+        return 0
+    client = create_model_client(settings, "categorize")
+    if not client.enabled:
+        return 0
+    rows = fetch_rows(
+        conn,
+        "SELECT id, title, extracted_text, summary FROM articles "
+        "WHERE category IS NULL OR category='' LIMIT ?",
+        (limit,),
+    )
+    changed = 0
+    for row in rows:
+        text = row["extracted_text"] or row["summary"] or ""
+        category = classify(row["title"], text, names, client)
+        conn.execute("UPDATE articles SET category=? WHERE id=?", (category, row["id"]))
+        changed += 1
+    conn.commit()
+    return changed
 
 
 def ingest_fixture(conn: sqlite3.Connection, feed_path: Path, settings: dict) -> int:
     """离线摄取: 把本地 feed 文件当成一个源, 走轮询器解析入库(无网络)。"""
     conn.execute(
-        "INSERT OR IGNORE INTO feed (url, title, tier, category) VALUES (?,?,?,?)",
-        (str(feed_path), "fixture", "wire", "international"),
+        "INSERT OR IGNORE INTO feed (url, name, description) VALUES (?,?,?)",
+        (str(feed_path), "fixture", "本地样本"),
     )
     conn.commit()
     print(f"inserted {poll(conn, settings)} fixture articles")

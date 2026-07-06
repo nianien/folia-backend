@@ -1,4 +1,4 @@
-"""自写轮询抓取器: 取代 FreshRSS。
+"""自写轮询抓取器。
 
 - feed 表就是订阅真身(本地即真身), 无账号/无密码/无外部 API。
 - 每轮遍历 enabled 的源: 条件请求(带上轮 ETag/Last-Modified)+ 自定义 UA + 超时,
@@ -15,7 +15,6 @@ from typing import Any
 
 import feedparser
 
-from .config import SourceMap, load_source_map
 from .db import insert_article, seed_default_feeds, upsert_source
 from .models import FeedArticle
 from .text import clean_text
@@ -27,20 +26,17 @@ TIMEOUT_SECONDS = 20
 def poll(conn: sqlite3.Connection, settings: dict[str, Any]) -> int:
     """抓取所有 enabled 的源, 返回本轮新入库文章数。"""
     seed_default_feeds(conn)  # 首启空表 → 播种默认订阅
-    source_map = load_source_map(conn)
     timeout = int(settings.get("poller", {}).get("timeout_seconds", TIMEOUT_SECONDS))
     prev_timeout = socket.getdefaulttimeout()
     socket.setdefaulttimeout(timeout)
     total = 0
     try:
         feeds = list(
-            conn.execute(
-                "SELECT url, title, tier, category, etag, modified FROM feed WHERE enabled=1"
-            )
+            conn.execute("SELECT url, name, etag, modified FROM feed WHERE enabled=1")
         )
         for feed in feeds:
             try:
-                inserted = _poll_one(conn, feed, source_map)
+                inserted = _poll_one(conn, feed)
                 total += inserted
                 _mark(conn, feed["url"], f"ok: +{inserted}")
             except Exception as exc:  # 单源失败不拖垮整轮
@@ -50,7 +46,7 @@ def poll(conn: sqlite3.Connection, settings: dict[str, Any]) -> int:
     return total
 
 
-def _poll_one(conn: sqlite3.Connection, feed: sqlite3.Row, source_map: SourceMap) -> int:
+def _poll_one(conn: sqlite3.Connection, feed: sqlite3.Row) -> int:
     parsed = feedparser.parse(
         feed["url"],
         etag=feed["etag"] or None,
@@ -61,7 +57,7 @@ def _poll_one(conn: sqlite3.Connection, feed: sqlite3.Row, source_map: SourceMap
         return 0
     inserted = 0
     for entry in parsed.entries:
-        article = _entry_to_article(entry, feed, source_map)
+        article = _entry_to_article(entry, feed)
         if article is None:
             continue
         upsert_source(conn, article.source_id, article.source_name, article.source_tier, article.category)
@@ -75,7 +71,7 @@ def _poll_one(conn: sqlite3.Connection, feed: sqlite3.Row, source_map: SourceMap
     return inserted
 
 
-def _entry_to_article(entry: Any, feed: sqlite3.Row, source_map: SourceMap) -> FeedArticle | None:
+def _entry_to_article(entry: Any, feed: sqlite3.Row) -> FeedArticle | None:
     title = clean_text(entry.get("title"))
     url = entry.get("link")
     if not title or not url:
@@ -87,20 +83,17 @@ def _entry_to_article(entry: Any, feed: sqlite3.Row, source_map: SourceMap) -> F
         content_html = contents[0].get("value", "") or ""
     if not content_html:
         content_html = entry.get("summary", "") or ""
-    # tier/category: source_map(按标题)优先, 命不中回退到 feed 行上的默认
-    meta = source_map.resolve(None, feed["title"])
-    tier = meta.tier if meta.tier != "unknown" else (feed["tier"] or "unknown")
-    category = meta.category if meta.category != "uncategorized" else (feed["category"] or "uncategorized")
+    summary = clean_text(content_html) or None
     return FeedArticle(
         source_id=feed["url"],
-        source_name=meta.name or feed["title"] or "unknown",
-        source_tier=tier,
-        category=category,
+        source_name=feed["name"] or "unknown",
+        source_tier="",  # tier 已废弃; 重要性以后从内容算, 不挂在源上
+        category="",  # 留空; 由 categorize_pending 按内容(LLM)定目录
         title=title,
         url=url,
         guid=guid,
         published_at=_published_iso(entry),
-        summary=clean_text(content_html) or None,
+        summary=summary,
         content_html=content_html or None,
         external_id=guid,
     )

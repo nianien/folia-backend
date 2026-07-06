@@ -1,4 +1,4 @@
-"""配置全部存 SQLite(settings / source_map 表), 由面板编辑。
+"""配置全部存 SQLite(settings / feed 表), 由面板编辑。
 
 - 只有 db 路径是引导项(env FOLIA_DB_PATH 或默认), 因为读 db 前得先知道 db 在哪。
 - 其余运行期配置: 内置默认(_defaults) + db `settings` 表的点分键覆盖 → 还原成既有的嵌套 dict,
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,37 +16,38 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@dataclass(frozen=True)
-class SourceMeta:
-    name: str | None
-    tier: str
-    category: str
+# 默认订阅源: (feed_url, 名称, 一句话描述)。feed 表为空时播种(db.seed_default_feeds)。
+# 原始 RSS/Atom 地址(自写轮询器直接抓, 全文交给 trafilatura)。分类由内容决定, 不挂在源上。
+DEFAULT_FEEDS: list[tuple[str, str, str]] = [
+    ("http://rsshub:1200/apnews/topics/apf-topnews", "AP News", "美联社,国际通讯社头条快讯"),
+    ("https://www.aljazeera.com/xml/rss/all.xml", "Al Jazeera", "半岛电视台,国际新闻"),
+    ("https://www.theguardian.com/world/rss", "Guardian World", "《卫报》国际版"),
+    ("https://feeds.bbci.co.uk/news/world/rss.xml", "BBC World", "BBC 世界新闻"),
+    ("https://hnrss.org/frontpage", "Hacker News", "科技创业社区热门讨论"),
+    ("http://rsshub:1200/latepost", "LatePost", "晚点 LatePost,中文科技与商业报道"),
+]
+
+# 默认目录: (名称, 描述, 颜色, 排序)。init_db 首建时播种; 用户可在「目录」页增删改。
+# "综合" 是兜底目录: 分类器都不匹配时落这里。
+DEFAULT_DIRECTORIES: list[tuple[str, str, str, int]] = [
+    ("国际", "国际/世界新闻", "#c2371d", 1),
+    ("科技", "科技 / 互联网 / AI", "#1d6f6b", 2),
+    ("中国", "中国相关", "#9c4722", 3),
+    ("综合", "其他 / 未归类(兜底)", "#7a6f5c", 99),
+]
 
 
-@dataclass(frozen=True)
-class SourceMap:
-    """tier/category lookup for FreshRSS feeds, keyed by streamId and origin title."""
-
-    by_stream_id: dict[str, SourceMeta]
-    by_title: dict[str, SourceMeta]
-
-    def resolve(self, stream_id: str | None, title: str | None) -> SourceMeta:
-        if stream_id and stream_id in self.by_stream_id:
-            return self.by_stream_id[stream_id]
-        if title and title in self.by_title:
-            return self.by_title[title]
-        return SourceMeta(name=None, tier="unknown", category="uncategorized")
-
-
-# 默认订阅源: (feed_url, 显示名, tier, category)。feed 表为空时播种(db.seed_default_feeds)。
-# 原始 RSS/Atom 地址(自写轮询器直接抓, 全文交给 trafilatura, 不再套 fulltextrss)。
-DEFAULT_FEEDS: list[tuple[str, str, str, str]] = [
-    ("http://rsshub:1200/apnews/topics/apf-topnews", "AP News", "wire", "international"),
-    ("https://www.aljazeera.com/xml/rss/all.xml", "Al Jazeera", "broadsheet", "international"),
-    ("https://www.theguardian.com/world/rss", "Guardian World", "broadsheet", "international"),
-    ("https://feeds.bbci.co.uk/news/world/rss.xml", "BBC World", "broadsheet", "international"),
-    ("https://hnrss.org/frontpage", "Hacker News", "interest", "tech"),
-    ("http://rsshub:1200/latepost", "LatePost", "cn", "china"),
+# 支持的 LLM 供应商(下拉顺序)。ollama 是本地(无 key)。openai/deepseek/qwen/xinapi 走
+# OpenAI 兼容 chat/completions; claude 走 messages; gemini 走 generateContent。
+# (显示名, 默认 endpoint, 历史 API key 环境变量名)。key 默认回退该环境变量, 配置页可覆盖。
+PROVIDERS: list[tuple[str, str, str, str]] = [
+    ("openai", "OpenAI", "https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY"),
+    ("claude", "Claude", "https://api.anthropic.com/v1/messages", "ANTHROPIC_API_KEY"),
+    ("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta", "GEMINI_API_KEY"),
+    ("deepseek", "DeepSeek", "https://api.deepseek.com/v1/chat/completions", "DEEPSEEK_API_KEY"),
+    ("qwen", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "DASHSCOPE_API_KEY"),
+    ("xinapi", "XinAPI", "https://airouter.xincache.cn/v1/chat/completions", "XIN_API_KEY"),
+    ("ollama", "Ollama(本地)", os.environ.get("OLLAMA_URL", "http://localhost:11434"), ""),
 ]
 
 
@@ -59,7 +59,6 @@ def _defaults() -> dict[str, Any]:
         },
         "embeddings": {
             "url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),
-            "model": "bge-m3",
             "timeout_seconds": 30,
         },
         "dedupe": {
@@ -67,15 +66,26 @@ def _defaults() -> dict[str, Any]:
             "jaccard_threshold": 0.42,
             "lookback_hours": 48,
         },
-        "model": {
-            "provider": "heuristic",
-            "timeout_seconds": 60,
+        "model": {  # LLM 通用参数(所有 provider 共用)
+            "timeout_seconds": 120,
             "temperature": 0.2,
             "max_output_tokens": 3000,
-            "openai": {"model": "gpt-4.1-mini", "api_key_env": "OPENAI_API_KEY", "endpoint": "https://api.openai.com/v1/responses"},
-            "claude": {"model": "claude-3-5-haiku-latest", "api_key_env": "ANTHROPIC_API_KEY", "endpoint": "https://api.anthropic.com/v1/messages"},
-            "gemini": {"model": "gemini-1.5-flash", "api_key_env": "GEMINI_API_KEY", "endpoint": "https://generativelanguage.googleapis.com/v1beta"},
-            "xinapi": {"model": "deepseek-ai/DeepSeek-R1", "api_key_env": "XIN_API_KEY", "endpoint": "https://airouter.xincache.cn/v1/chat/completions"},
+        },
+        # 各供应商的 endpoint 与 API key; key 默认取历史环境变量, 配置页可覆盖并落库。
+        "providers": {
+            name: {
+                "endpoint": endpoint,
+                "api_key": os.environ.get(key_env, "") if key_env else "",
+            }
+            for name, _label, endpoint, key_env in PROVIDERS
+        },
+        # 各功能选 provider + 模型。embedding 走本地 Ollama(只填模型名);
+        # categorize/synthesis/facts 的 provider 为空 = 规则(不用模型)。
+        "models": {
+            "embedding": "bge-m3",
+            "categorize": {"provider": "ollama", "model": "gemma3:4b"},
+            "synthesis": {"provider": "", "model": ""},
+            "facts": {"provider": "", "model": ""},
         },
         "loop": {"enabled": False, "interval": 1800},
     }
@@ -131,21 +141,3 @@ def database_path() -> Path:
         path = ROOT / path
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def load_source_map(conn: sqlite3.Connection) -> SourceMap:
-    by_stream_id: dict[str, SourceMeta] = {}
-    by_title: dict[str, SourceMeta] = {}
-    for row in conn.execute(
-        "SELECT match_type, match_key, name, tier, category FROM source_map"
-    ):
-        meta = SourceMeta(
-            name=row["name"],
-            tier=row["tier"] or "unknown",
-            category=row["category"] or "uncategorized",
-        )
-        if row["match_type"] == "stream_id":
-            by_stream_id[str(row["match_key"])] = meta
-        else:
-            by_title[str(row["match_key"])] = meta
-    return SourceMap(by_stream_id=by_stream_id, by_title=by_title)

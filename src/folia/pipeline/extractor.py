@@ -45,7 +45,7 @@ def html_to_text(content_html: str | None) -> str:
 
 
 def fetch_fulltext(url: str) -> str:
-    """抓文章 URL, 用 trafilatura 抽净化正文。取代 fulltextrss。失败返回空串。"""
+    """抓文章 URL, 用 trafilatura 抽净化正文。失败返回空串。"""
     import trafilatura
 
     downloaded = trafilatura.fetch_url(url)

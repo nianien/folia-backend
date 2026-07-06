@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Python backend prototype. `src/folia/pipeline/` contains the pipeline package (incl. the FastAPI control panel under `panel/`); runtime configuration lives in the SQLite DB (`settings`/`source_map`/`feed_seed` tables), edited via the control panel; `docker-compose.yml` brings up the base layer (RSSHub + FreshRSS + FiveFilters Full-Text RSS) plus the `panel` service; `docs/` contains product/technical design docs and the FreshRSS setup guide; `tests/` contains standard-library `unittest` coverage; and `data/` holds the local SQLite DB.
+This repository is a Python backend prototype. `src/folia/pipeline/` contains the pipeline package (incl. the FastAPI control panel under `panel/`); runtime configuration lives in the SQLite DB (`settings`/`feed`/`directory` tables), edited via the control panel; `docker-compose.yml` brings up RSSHub (feeds for sources without native RSS) plus the `panel` service; `docs/` contains product/technical design docs; `tests/` contains standard-library `unittest` coverage; and `data/` holds the local SQLite DB.
 
-The pipeline reads already-full-text articles from FreshRSS via the Google Reader API; it does not fetch web pages or parse RSS itself.
+The pipeline polls RSS/Atom feeds itself (in-app poller), extracts full text with trafilatura, then clusters, categorizes, and synthesizes. LLM calls route through per-function providers (local Ollama or a remote API) configured in the panel.
 
 Do not commit local environment directories such as `.venv/`, generated caches, or machine-specific editor files.
 
@@ -16,10 +16,10 @@ Use Python 3 from a virtual environment:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-# offline editorial layer against a recorded FreshRSS response:
+# offline editorial layer against a local feed fixture:
 folia-pipeline init-db
-folia-pipeline ingest-fixture tests/fixtures/freshrss_reading_list.json
-# full run (requires the docker-compose base layer up; see README):
+folia-pipeline ingest-fixture tests/fixtures/sample_feed.xml
+# full run (needs RSSHub up for rsshub-backed feeds; see README):
 folia-pipeline run-once
 ```
 
@@ -29,7 +29,7 @@ Without editable install, run commands with `PYTHONPATH=src`, for example `PYTHO
 
 Follow standard Python style: 4-space indentation, snake_case for functions and variables, PascalCase for classes, and UPPER_SNAKE_CASE for constants. Keep modules focused on one responsibility. Use type hints for new public functions and data structures, especially around article, cluster, and layout records.
 
-Prefer clear, boring names that match the spec: `articles`, `clusters`, `layout`, `freshrss_client`, `extractor`, `embeddings`, `dedupe`, `scorer`, and `ranker`.
+Prefer clear, boring names that match the domain: `articles`, `clusters`, `poller`, `extractor`, `categorize`, `embeddings`, `dedupe`, `synthesizer`, and `model_client`.
 
 ## Testing Guidelines
 
@@ -39,7 +39,7 @@ Run tests with `PYTHONPATH=src python -m unittest discover -s tests`. Keep fixtu
 
 ## Commit & Pull Request Guidelines
 
-This directory is not currently initialized as a Git repository, so no local commit convention is available. Use concise imperative commits, optionally with Conventional Commit prefixes, for example `feat: add FastAPI layout endpoint` or `test: cover cross-day progress gate`.
+Use concise imperative commits, optionally with Conventional Commit prefixes, for example `feat: add FastAPI layout endpoint` or `test: cover cross-day progress gate`.
 
 Pull requests should include a short summary, the user-visible behavior changed, tests run, and any configuration or migration notes. Include screenshots only for UI changes.
 

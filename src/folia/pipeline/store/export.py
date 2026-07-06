@@ -13,8 +13,6 @@ from pathlib import Path
 
 from ..viewer import (
     CITE_RE,
-    PLACEHOLDER,
-    PLACEHOLDER_BRACKET,
     cat_meta,
     cluster_image,
     first_image,
@@ -42,8 +40,6 @@ def export_frontpage(conn: sqlite3.Connection) -> dict:
     for row in rows:
         title = (row["title"] or "").strip()
         synth = row["synthesized_text"] or ""
-        if PLACEHOLDER in title:
-            continue
         body_md = clean_markdown(synth)
         plain = markdown_to_plain(body_md)
         category = row["category"] or "uncategorized"
@@ -102,11 +98,11 @@ def load_sources(conn: sqlite3.Connection, cluster_id: int) -> list[dict]:
 
 
 def clean_markdown(markdown: str) -> str:
-    """Drop the leading '# title' line and the trailing Sources section; strip
-    the fulltextrss failure placeholder. Sources travel as structured data."""
+    """Drop the leading '# title' line and the trailing Sources section.
+    Sources travel as structured data."""
     out: list[str] = []
     for raw in markdown.splitlines():
-        line = raw.rstrip().replace(PLACEHOLDER_BRACKET, "")
+        line = raw.rstrip()
         if line.startswith("# "):
             continue
         if line.startswith("## "):
@@ -122,7 +118,7 @@ def markdown_to_plain(markdown: str) -> str:
     for raw in markdown.splitlines():
         line = _HEADING_RE.sub("", raw.strip())
         line = CITE_RE.sub("", line)
-        line = line.replace(PLACEHOLDER_BRACKET, "").strip()
+        line = line.strip()
         if line and line != "---":
             lines.append(line)
     return "\n".join(lines)

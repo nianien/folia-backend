@@ -1,37 +1,215 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>控制台</h1>
+<h1>设置</h1>
+{% if msg %}<div class="card msg">{{ msg }}</div>{% endif %}
 
-<div class="card">
-  <div class="row" style="justify-content:space-between">
-    <div>
-      循环状态：
-      {% if enabled %}<span class="pill on">运行中</span>{% else %}<span class="pill off">已暂停</span>{% endif %}
-      {% if status.busy %}<span class="muted">· 正在跑一轮…</span>{% endif %}
+<div class="tabbar">
+  <a data-tab="fetch">抓取</a>
+  <a data-tab="sync">数据同步</a>
+  <a data-tab="sources">数据源</a>
+  <a data-tab="directory">目录</a>
+  <a data-tab="models">模型</a>
+</div>
+
+<!-- 抓取 -->
+<div class="tabpane" id="tab-fetch">
+  <div class="card">
+    <div class="kv"><span class="k">状态</span><span>
+      {{ '抓取中…' if status.busy else ('循环运行中' if enabled else '已停止') }}
+      <span class="pill {{ 'on' if enabled else 'off' }}">{{ '运行中' if enabled else '已停止' }}</span></span></div>
+    <div class="kv"><span class="k">上次</span><span class="muted">{{ status.last_message }}{% if status.last_run %} · {{ status.last_run }}{% endif %}</span></div>
+    <div class="row" style="margin-top:14px">
+      {% if enabled %}
+        <form method="post" action="/admin/loop/stop"><button class="danger">停止循环</button></form>
+      {% else %}
+        <form method="post" action="/admin/loop/start"><button>启动循环</button></form>
+      {% endif %}
+      <form method="post" action="/admin/loop/run"><button class="ghost">立即抓取一次</button></form>
     </div>
-    <div class="muted">间隔 {{ interval }}s</div>
+    <form method="post" action="/admin/interval" class="subform">
+      <label>抓取间隔（秒）</label>
+      <div class="hint">每隔多久自动抓取一次，1800 秒约半小时。</div>
+      <div class="row">
+        <input type="number" name="loop_interval" min="5" value="{{ interval }}" style="max-width:220px">
+        <button class="ghost">保存</button>
+      </div>
+    </form>
   </div>
-  <div class="row" style="margin-top:14px">
-    {% if enabled %}
-      <form method="post" action="/admin/loop/stop"><button class="danger">暂停循环</button></form>
+</div>
+
+<!-- 数据同步 -->
+<div class="tabpane" id="tab-sync">
+  <div class="card">
+    <form method="post" action="/admin/database">
+      <label>云端数据库</label>
+      <div class="hint">把聚合结果同步到云端 Neon 数据库；留空则只保存在本地。</div>
+      <div class="row">
+        <input type="text" name="database_url" value="{{ database_url }}"
+               placeholder="postgres://用户:密码@主机/库名" style="flex:1;min-width:260px">
+        <button class="ghost">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 数据源 -->
+<div class="tabpane" id="tab-sources">
+  <div class="card">
+    <div class="hint">源只管“从哪抓”；新闻的分类由内容自动判定，不在这里配置。</div>
+    <form method="post" action="/admin/sources/add">
+      <div class="row">
+        <input type="text" name="feed_url" placeholder="地址（RSS / Atom URL）" style="flex:2;min-width:240px">
+        <input type="text" name="name" placeholder="名称" style="flex:1;min-width:120px">
+        <button>添加</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" name="description" placeholder="描述（一句话介绍这个源）" style="flex:1;min-width:260px">
+      </div>
+    </form>
+    <form method="post" action="/admin/sources/import-seed" style="margin-top:10px">
+      <button class="ghost">导入默认订阅</button>
+    </form>
+  </div>
+  <div class="card">
+    {% if feeds %}
+    <table>
+      <thead><tr><th>名称</th><th>地址</th><th>描述</th><th>上次抓取</th><th></th></tr></thead>
+      <tbody>
+      {% for f in feeds %}
+        <tr>
+          <td>{{ f.name or '—' }}</td>
+          <td class="muted"><code>{{ f.url }}</code></td>
+          <td class="muted">{{ f.description or '—' }}</td>
+          <td class="muted">{{ f.last_status or '未抓取' }}</td>
+          <td><form method="post" action="/admin/sources/remove">
+            <input type="hidden" name="url" value="{{ f.url }}">
+            <button class="danger">删除</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
     {% else %}
-      <form method="post" action="/admin/loop/start"><button>启动循环</button></form>
+    <p class="muted">还没有订阅源。点「导入默认订阅」，或在上面添加一个 RSS 地址。</p>
     {% endif %}
-    <form method="post" action="/admin/loop/run"><button class="ghost">立即跑一轮</button></form>
   </div>
 </div>
 
-<div class="card">
-  <label>最近一轮</label>
-  <div>结果：
-    {% if status.last_ok is none %}<span class="muted">尚未运行</span>
-    {% elif status.last_ok %}<span class="pill on">成功</span>
-    {% else %}<span class="pill off">失败</span>{% endif %}
+<!-- 目录 -->
+<div class="tabpane" id="tab-directory">
+  <div class="card">
+    <div class="hint">目录 = 新闻的分类。聚合后的新闻由模型按内容自动归入某个目录；都不匹配时归「综合」。这套目录同时决定预览页的分类标签。</div>
+    <form method="post" action="/admin/directory/add">
+      <div class="row">
+        <input type="text" name="name" placeholder="目录名（如 财经）" style="flex:1;min-width:120px">
+        <input type="text" name="description" placeholder="描述（帮模型判断该归哪些新闻）" style="flex:2;min-width:200px">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="color" name="color" value="#7a6f5c" title="标签颜色" style="width:48px;padding:2px">
+        <input type="number" name="sort_order" value="50" title="排序" style="max-width:100px">
+        <button>保存目录</button>
+      </div>
+    </form>
   </div>
-  <div class="muted" style="margin-top:6px">{{ status.last_message }}</div>
-  <div class="muted" style="margin-top:6px">时间：{{ status.last_run or '—' }}</div>
+  <div class="card">
+    {% if directories %}
+    <table>
+      <thead><tr><th>目录</th><th>描述</th><th>排序</th><th></th></tr></thead>
+      <tbody>
+      {% for d in directories %}
+        <tr>
+          <td><span class="swatch" style="background:{{ d.color }}"></span>{{ d.name }}</td>
+          <td class="muted">{{ d.description or '—' }}</td>
+          <td class="muted">{{ d.sort_order }}</td>
+          <td><form method="post" action="/admin/directory/remove">
+            <input type="hidden" name="name" value="{{ d.name }}">
+            <button class="danger">删除</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">还没有目录。</p>{% endif %}
+  </div>
 </div>
 
-<p class="muted">循环每 {{ interval }}s 跑一轮（抓取→清洗→聚合，配了 DATABASE_URL 则顺带入库）。
-改间隔/凭据去 <a href="/admin/config">配置</a>；管订阅去 <a href="/admin/sources">数据源</a>。</p>
+<!-- 模型 -->
+<div class="tabpane" id="tab-models">
+  <!-- 供应商凭证: endpoint + API key -->
+  <div class="card">
+    <h3 style="margin-top:0">供应商</h3>
+    <div class="hint">在这里填各家的 API key 与 endpoint（存入本机数据库，随时切换，不改环境变量、不用重启）。
+      密钥不回显；留空表示保持原值不动。Ollama 是本地，无需密钥。</div>
+    <form method="post" action="/admin/providers">
+      <datalist id="ollama-models">{% for m in available_models %}<option value="{{ m }}">{% endfor %}</datalist>
+      {% for p in providers %}
+      <div style="border-top:1px solid #e7e2d8;padding-top:10px;margin-top:10px">
+        <label>{{ p.label }}
+          {% if not p.local %}<span class="pill {{ 'on' if p.has_key else 'off' }}">{{ '已设密钥' if p.has_key else '未设密钥' }}</span>{% endif %}
+        </label>
+        <div class="hint">Endpoint</div>
+        <input type="text" name="{{ p.name }}_endpoint" value="{{ p.endpoint }}" style="width:100%">
+        {% if not p.local %}
+        <div class="hint">API key</div>
+        <input type="password" name="{{ p.name }}_key" autocomplete="off"
+               placeholder="{{ '已设置，留空不改' if p.has_key else '未设置' }}" style="width:100%">
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div style="height:12px"></div>
+      <button>保存供应商</button>
+    </form>
+  </div>
+
+  <!-- 各功能: 选 provider + 模型 -->
+  <div class="card">
+    <h3 style="margin-top:0">功能模型</h3>
+    <div class="hint">每个功能各选一家供应商与模型。分类/综述/事实的供应商选「规则（不用模型）」则走本地规则（免费、快）。
+      Ollama 模型可从下拉建议里选（本机已装）；远程供应商直接填模型名（如 gpt-4.1-mini、claude-3-5-haiku-latest）。
+      {% if not available_models %}<br><b style="color:#a33">读不到本机 Ollama 模型列表（Ollama 没起？）——先 <code>ollama serve</code>。</b>{% endif %}</div>
+    <form method="post" action="/admin/models">
+      <label>聚类向量（embedding）</label>
+      <div class="hint">算文章相似度、聚类。固定走本地 Ollama。</div>
+      <input type="text" name="embedding" list="ollama-models" value="{{ embedding_model }}" style="width:100%">
+      <div style="height:16px"></div>
+
+      {% set labels = {'categorize':'新闻分类','synthesis':'综述生成','facts':'事实抽取'} %}
+      {% set hints = {'categorize':'把新闻归到某个目录','synthesis':'把一簇多源写成一条摘要','facts':'从单篇抽关键事实'} %}
+      {% for fn in chat_functions %}
+      <label>{{ labels[fn] }}</label>
+      <div class="hint">{{ hints[fn] }}</div>
+      <div style="display:flex;gap:8px">
+        <select name="{{ fn }}_provider" style="flex:0 0 40%">
+          <option value="" {{ 'selected' if not models[fn].provider else '' }}>规则（不用模型）</option>
+          {% for name, label in provider_options %}
+          <option value="{{ name }}" {{ 'selected' if models[fn].provider==name else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="{{ fn }}_model" list="ollama-models" value="{{ models[fn].model }}"
+               placeholder="模型名" style="flex:1">
+      </div>
+      <div style="height:16px"></div>
+      {% endfor %}
+      <button>保存模型</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  var active = params.get('tab') || 'fetch';
+  var panes = document.querySelectorAll('.tabpane');
+  var tabs = document.querySelectorAll('.tabbar a');
+  function show(t){
+    panes.forEach(function(p){ p.style.display = (p.id === 'tab-' + t) ? 'block' : 'none'; });
+    tabs.forEach(function(a){ a.classList.toggle('active', a.dataset.tab === t); });
+  }
+  tabs.forEach(function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault(); show(a.dataset.tab);
+      history.replaceState(null, '', '?tab=' + a.dataset.tab);
+    });
+  });
+  show(active);
+})();
+</script>
 {% endblock %}

@@ -28,6 +28,23 @@
   .pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:700; }
   .on { background:#dff0d8; color:#2d6a2d; } .off { background:#f2e2e0; color:#a33; }
   .muted { color:var(--muted); } .msg { color:#2d6a2d; font-weight:600; }
+  .hint { font-size:12px; color:var(--muted); margin:2px 0 10px; }
+  .hint b { color:var(--ink); font-weight:600; }
+  .sec { margin-bottom:30px; }
+  .sec-head { display:flex; align-items:center; justify-content:space-between; gap:12px;
+    border-bottom:2px solid var(--ink); padding-bottom:8px; margin-bottom:14px; }
+  .sec-head h2 { font-size:15px; margin:0; letter-spacing:.03em; }
+  .sec-head form { margin:0; }
+  .kv { display:flex; gap:10px; padding:3px 0; font-size:14px; }
+  .kv .k { color:var(--muted); min-width:44px; }
+  .subform { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+  .tabbar { display:flex; gap:4px; border-bottom:2px solid var(--ink); margin-bottom:20px; flex-wrap:wrap; }
+  .tabbar a { padding:8px 16px; color:var(--muted); text-decoration:none; font-size:14px; font-weight:600;
+    border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; cursor:pointer; }
+  .tabbar a.active { color:var(--ink); background:#fffaf0; border-color:var(--line); border-bottom:2px solid #fffaf0; }
+  .tabpane { display:none; }
+  select { padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; font:inherit; min-width:220px; }
+  .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:middle; margin-right:6px; }
   table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:14px; }
   th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
   code { background:#efe7d6; padding:1px 5px; border-radius:4px; font-size:13px; }
@@ -37,10 +54,8 @@
 <header><div class="bar">
   <span class="brand">FOLIA 控制面板</span>
   <nav>
-    <a href="/" >预览</a>
-    <a href="/admin" class="{{ 'active' if nav=='admin' else '' }}">控制台</a>
-    <a href="/admin/config" class="{{ 'active' if nav=='config' else '' }}">配置</a>
-    <a href="/admin/sources" class="{{ 'active' if nav=='sources' else '' }}">数据源</a>
+    <a href="/">预览</a>
+    <a href="/admin" class="{{ 'active' if nav=='admin' else '' }}">设置</a>
   </nav>
 </div></header>
 <main>{% block body %}{% endblock %}</main>
