@@ -23,7 +23,10 @@ services:
       - rsshub
     ports:
       - "127.0.0.1:8000:8000"   # 只绑回环, 不暴露到局域网
-    environment:
+    env_file:                   # 运行期注入 provider key 等(部署到别的机器换那台的 .env)
+      - path: .env
+        required: false         # 没有 .env 也能起(远程 provider 无 key 则退回规则)
+    environment:                # environment 覆盖 env_file 同名项
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
     volumes:
       - ./data:/app/data        # SQLite + 导出产物落宿主机
