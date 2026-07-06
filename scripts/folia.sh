@@ -24,11 +24,12 @@ cmd_start() {
     [ "${st:-}" = "running" ] || echo "未就绪 ✗ (docker compose logs $svc)"
   done
   echo
-  echo "控制面板: http://localhost:8000"
+  echo "控制面板: http://localhost:8000/admin"
   echo "首次上手(都在面板里点):"
-  echo "  1) 面板 → 数据源: 点「导入默认订阅」或加自己的 RSS 地址"
-  echo "  2) 面板 → 配置: (可选) 填 DATABASE_URL / 改间隔"
-  echo "  3) 面板 → 控制台: 启动循环 (需本机 ollama serve + ollama pull bge-m3)"
+  echo "  1) 数据源: 点「导入默认订阅」或加自己的 RSS 地址"
+  echo "  2) 模型: 各功能选 provider + 模型(远程 provider 填 API key; embedding 走本地 Ollama)"
+  echo "  3) 数据同步: (可选) 填 database.url(Neon)"
+  echo "  4) 抓取: 设间隔并「启动循环」(需本机 ollama serve + ollama pull bge-m3)"
 }
 
 cmd_stop() { need_docker; docker compose down; echo "已停止(数据在宿主机 ./data, 不丢)。"; }
@@ -61,7 +62,7 @@ folia.sh — 起停整套 (rsshub + 控制面板)
   install   本地 dev 环境(uv sync, 跑测试用)
   help      本帮助
 
-日常操作都在控制面板里: 配置凭据/间隔、启停循环、立即跑、管数据源、看预览。
+日常操作都在控制面板里: 抓取(启停/间隔)、数据同步、数据源、目录、模型(provider+密钥)、看预览。
 EOF
 }
 
