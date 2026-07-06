@@ -17,9 +17,8 @@ from fastapi import FastAPI, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import ollama
 from .. import viewer as viewer_mod
-from ..config import PROVIDERS, is_pg_dsn, load_settings
+from ..config import EMBED_MODELS, PROVIDER_MODELS, PROVIDERS, is_pg_dsn, load_settings
 from ..db import connect
 from . import settings as cfg_store
 from .runner import PipelineRunner
@@ -97,16 +96,6 @@ def create_app(db_path: Path) -> FastAPI:
             directories = cfg_store.list_directories(conn)
         finally:
             conn.close()
-        available = ollama.list_models(s["embeddings"]["url"])  # 本机已装模型
-        providers_cfg = s["providers"]
-        provider_rows = [  # 凭证区: 密钥只暴露「是否已设」, 不回显原值
-            {
-                "name": name, "label": label, "local": name == "ollama",
-                "endpoint": providers_cfg.get(name, {}).get("endpoint", ""),
-                "has_key": bool(providers_cfg.get(name, {}).get("api_key")),
-            }
-            for name, label, _ep, _kenv in PROVIDERS
-        ]
         return templates.TemplateResponse(
             request,
             "admin.html",
@@ -118,8 +107,8 @@ def create_app(db_path: Path) -> FastAPI:
                 "chat_functions": CHAT_FUNCTIONS, "models": s["models"],
                 "embedding_model": s["models"]["embedding"],
                 "provider_options": [(name, label) for name, label, _e, _k in PROVIDERS],
-                "providers": provider_rows,
-                "available_models": available,
+                "provider_models": PROVIDER_MODELS,
+                "embed_models": EMBED_MODELS,
             },
         )
 
@@ -207,25 +196,8 @@ def create_app(db_path: Path) -> FastAPI:
         conn.close()
         return _back("目录已删除", "directory")
 
-    # 供应商: 各 provider 的 endpoint 与 API key(密钥留空=不改, 不会清空已存)
-    @app.post("/admin/providers")
-    async def set_providers(request: Request):
-        form = await request.form()
-        values: dict[str, str] = {}
-        for name, _label, _ep, _kenv in PROVIDERS:
-            endpoint = str(form.get(f"{name}_endpoint", "")).strip()
-            if endpoint:
-                values[f"providers.{name}.endpoint"] = endpoint
-            key = str(form.get(f"{name}_key", "")).strip()
-            if key:  # 留空表示保持原密钥不动
-                values[f"providers.{name}.api_key"] = key
-        if values:
-            conn = db(); cfg_store.set_many(conn, values); conn.close()
-            runner.notify()
-        return _back("供应商配置已保存 ✓", "models")
-
-    # 模型: embedding 固定本地 Ollama(填模型名); 其余功能各选 provider + 模型
-    #       (provider 留空 = 规则/不用模型)
+    # 模型: embedding 固定本地 Ollama; 其余功能各选 provider + 模型
+    #       (provider 留空 = 规则/不用模型)。供应商 key/endpoint 从环境变量读, 不在页面配。
     @app.post("/admin/models")
     def set_models(
         embedding: str = Form(""),

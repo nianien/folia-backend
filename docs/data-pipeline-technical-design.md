@@ -34,7 +34,6 @@ src/folia/pipeline/
   facts.py                  # 单篇事实抽取
   synthesizer.py            # 多源融合重排
   model_client.py           # 多 provider LLM 客户端(见 §8)
-  ollama.py                 # 本地 Ollama: 列已装模型(供面板下拉)
   db.py / models.py / text.py / viewer.py
   store/export.py           # SQLite -> frontpage.json
   store/loader.py           # frontpage.json -> Neon Postgres
@@ -151,7 +150,7 @@ title + summary/extracted_text 前若干字
   - `openai` / `deepseek` / `qwen` / `xinapi`:OpenAI 兼容 `/chat/completions`,Bearer;
   - `claude`:Anthropic `/v1/messages`,x-api-key;
   - `gemini`:`/models/{model}:generateContent?key=`。
-  远程 provider 缺 key / 调用失败 → 抛 `ModelError`,消费方 catch 后退回规则,不中断 pipeline。API key 在面板填、存 DB,未设则回退历史环境变量。
+  远程 provider 缺 key / 调用失败 → 抛 `ModelError`,消费方 catch 后退回规则,不中断 pipeline。API key / endpoint 从环境变量读(`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` / `XIN_API_KEY`),不在面板配置;面板只按功能选 provider + 预置模型。
 
 ## 9. 导出与入库
 

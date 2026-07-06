@@ -4,8 +4,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# uv: 从官方镜像拷二进制, 仅构建期用来按 uv.lock 装依赖
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# uv: 从官方镜像拷二进制(固定版本, 可复现), 仅构建期用来按 uv.lock 装依赖
+COPY --from=ghcr.io/astral-sh/uv:0.11.20 /uv /bin/uv
 
 # 先只拷依赖声明命中缓存层; 只装依赖不装本包(保持从 /app/src 源码运行, 不破坏 ROOT)
 COPY pyproject.toml uv.lock ./

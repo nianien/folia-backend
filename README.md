@@ -57,13 +57,14 @@ Only the DB path is a bootstrap value (`FOLIA_DB_PATH` env or `data/frontpage.sq
 ## Model providers
 
 Each function (`categorize` / `synthesis` / `facts`) picks its own provider and model
-from the panel (Models tab); `embedding` is fixed to local Ollama. Leaving a function's
+from the panel (Models tab), choosing from preset model lists per provider
+(`config.PROVIDER_MODELS`); `embedding` is fixed to local Ollama. Leaving a function's
 provider empty uses the local heuristic fallback (free, fast).
 
 Supported providers: `openai`, `claude`, `gemini`, `deepseek`, `qwen`, `xinapi`,
-`ollama` (local). API keys and endpoints are entered in the panel and stored in the DB;
-they also fall back to the matching env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `XIN_API_KEY`) if unset.
+`ollama` (local). API keys / endpoints are read from environment variables
+(`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`,
+`DASHSCOPE_API_KEY`, `XIN_API_KEY`), not configured in the panel.
 
 ## Commands
 

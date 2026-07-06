@@ -50,6 +50,20 @@ PROVIDERS: list[tuple[str, str, str, str]] = [
     ("ollama", "Ollama(本地)", os.environ.get("OLLAMA_URL", "http://localhost:11434"), ""),
 ]
 
+# 各 provider 的预置候选模型(面板下拉用; 要别的在这里加)。
+PROVIDER_MODELS: dict[str, list[str]] = {
+    "openai": ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1", "gpt-4o"],
+    "claude": ["claude-3-5-haiku-latest", "claude-3-5-sonnet-latest"],
+    "gemini": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
+    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "qwen": ["qwen-plus", "qwen-turbo", "qwen-max"],
+    "xinapi": ["deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3"],
+    "ollama": ["gemma3:4b", "qwen2.5", "llama3.2", "gemma2:9b"],
+}
+
+# embedding 固定本地 Ollama 的预置候选(嵌入模型, 与 chat 模型不同)。
+EMBED_MODELS: list[str] = ["bge-m3", "nomic-embed-text", "mxbai-embed-large"]
+
 
 def _defaults() -> dict[str, Any]:
     return {

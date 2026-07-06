@@ -184,7 +184,7 @@ Neon 侧 `stories` 表:`load` 事务内标全表 `active=false`,按 `story_id` u
 | SQLite 并发 | WAL + 管道单写者,预览只读 |
 | feed 失效 | 每源记 `last_status` / `last_fetched_at`,面板可见 |
 | 管道挂掉 | 面板显式暴露最近运行状态;最差体验是"看起来正常但内容是旧的" |
-| 云密钥/账号 | provider key 存 SQLite(面板填,输入框不回显);db 文件已 gitignore;远程 provider 账号失效不影响本地(可退回规则或本地 Ollama) |
+| 云密钥/账号 | provider key 从环境变量读(不入库、不在面板配);远程 provider 账号失效不影响本地(可退回规则或本地 Ollama) |
 | 合规(国内) | 个人自用、不公开服务 |
 
 ---

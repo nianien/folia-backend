@@ -133,64 +133,79 @@
 
 <!-- 模型 -->
 <div class="tabpane" id="tab-models">
-  <!-- 供应商凭证: endpoint + API key -->
-  <div class="card">
-    <h3 style="margin-top:0">供应商</h3>
-    <div class="hint">在这里填各家的 API key 与 endpoint（存入本机数据库，随时切换，不改环境变量、不用重启）。
-      密钥不回显；留空表示保持原值不动。Ollama 是本地，无需密钥。</div>
-    <form method="post" action="/admin/providers">
-      <datalist id="ollama-models">{% for m in available_models %}<option value="{{ m }}">{% endfor %}</datalist>
-      {% for p in providers %}
-      <div style="border-top:1px solid #e7e2d8;padding-top:10px;margin-top:10px">
-        <label>{{ p.label }}
-          {% if not p.local %}<span class="pill {{ 'on' if p.has_key else 'off' }}">{{ '已设密钥' if p.has_key else '未设密钥' }}</span>{% endif %}
-        </label>
-        <div class="hint">Endpoint</div>
-        <input type="text" name="{{ p.name }}_endpoint" value="{{ p.endpoint }}" style="width:100%">
-        {% if not p.local %}
-        <div class="hint">API key</div>
-        <input type="password" name="{{ p.name }}_key" autocomplete="off"
-               placeholder="{{ '已设置，留空不改' if p.has_key else '未设置' }}" style="width:100%">
-        {% endif %}
-      </div>
-      {% endfor %}
-      <div style="height:12px"></div>
-      <button>保存供应商</button>
-    </form>
-  </div>
-
-  <!-- 各功能: 选 provider + 模型 -->
   <div class="card">
     <h3 style="margin-top:0">功能模型</h3>
     <div class="hint">每个功能各选一家供应商与模型。分类/综述/事实的供应商选「规则（不用模型）」则走本地规则（免费、快）。
-      Ollama 模型可从下拉建议里选（本机已装）；远程供应商直接填模型名（如 gpt-4.1-mini、claude-3-5-haiku-latest）。
-      {% if not available_models %}<br><b style="color:#a33">读不到本机 Ollama 模型列表（Ollama 没起？）——先 <code>ollama serve</code>。</b>{% endif %}</div>
+      模型是各供应商的预置候选（要加别的在 <code>config.PROVIDER_MODELS</code> 里改）。
+      远程供应商的 API key 从环境变量读（<code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> /
+      <code>GEMINI_API_KEY</code> / <code>DEEPSEEK_API_KEY</code> / <code>DASHSCOPE_API_KEY</code> /
+      <code>XIN_API_KEY</code>），不在页面配置。</div>
     <form method="post" action="/admin/models">
       <label>聚类向量（embedding）</label>
       <div class="hint">算文章相似度、聚类。固定走本地 Ollama。</div>
-      <input type="text" name="embedding" list="ollama-models" value="{{ embedding_model }}" style="width:100%">
+      <select name="embedding" style="width:100%">
+        {% if embedding_model and embedding_model not in embed_models %}
+        <option value="{{ embedding_model }}" selected>{{ embedding_model }}</option>
+        {% endif %}
+        {% for m in embed_models %}
+        <option value="{{ m }}" {{ 'selected' if embedding_model==m else '' }}>{{ m }}</option>
+        {% endfor %}
+      </select>
       <div style="height:16px"></div>
 
       {% set labels = {'categorize':'新闻分类','synthesis':'综述生成','facts':'事实抽取'} %}
       {% set hints = {'categorize':'把新闻归到某个目录','synthesis':'把一簇多源写成一条摘要','facts':'从单篇抽关键事实'} %}
       {% for fn in chat_functions %}
+      {% set cur = models[fn] %}
+      {% set opts = provider_models.get(cur.provider, []) %}
       <label>{{ labels[fn] }}</label>
       <div class="hint">{{ hints[fn] }}</div>
       <div style="display:flex;gap:8px">
         <select name="{{ fn }}_provider" style="flex:0 0 40%">
-          <option value="" {{ 'selected' if not models[fn].provider else '' }}>规则（不用模型）</option>
+          <option value="" {{ 'selected' if not cur.provider else '' }}>规则（不用模型）</option>
           {% for name, label in provider_options %}
-          <option value="{{ name }}" {{ 'selected' if models[fn].provider==name else '' }}>{{ label }}</option>
+          <option value="{{ name }}" {{ 'selected' if cur.provider==name else '' }}>{{ label }}</option>
           {% endfor %}
         </select>
-        <input type="text" name="{{ fn }}_model" list="ollama-models" value="{{ models[fn].model }}"
-               placeholder="模型名" style="flex:1">
+        <select name="{{ fn }}_model" style="flex:1" {{ 'disabled' if not cur.provider else '' }}>
+          {% if not cur.provider %}<option value="">—</option>{% endif %}
+          {% if cur.model and cur.model not in opts %}
+          <option value="{{ cur.model }}" selected>{{ cur.model }}</option>
+          {% endif %}
+          {% for m in opts %}
+          <option value="{{ m }}" {{ 'selected' if cur.model==m else '' }}>{{ m }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div style="height:16px"></div>
       {% endfor %}
       <button>保存模型</button>
     </form>
   </div>
+
+  <script>
+  (function(){
+    var PROVIDER_MODELS = {{ provider_models | tojson }};
+    var CHAT_FNS = {{ chat_functions | tojson }};
+    function q(name){ return document.querySelector('[name="' + name + '"]'); }
+    function fill(fn){
+      var prov = q(fn + '_provider').value, sel = q(fn + '_model');
+      while(sel.firstChild) sel.removeChild(sel.firstChild);
+      if(!prov){  // 规则(不用模型)
+        var o = document.createElement('option'); o.value=''; o.textContent='—';
+        sel.appendChild(o); sel.disabled = true; return;
+      }
+      sel.disabled = false;
+      (PROVIDER_MODELS[prov] || []).forEach(function(m){
+        var o = document.createElement('option'); o.value=m; o.textContent=m; sel.appendChild(o);
+      });
+    }
+    CHAT_FNS.forEach(function(fn){
+      var p = q(fn + '_provider');
+      if(p) p.addEventListener('change', function(){ fill(fn); });
+    });
+  })();
+  </script>
 </div>
 
 <script>
