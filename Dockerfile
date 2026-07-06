@@ -1,18 +1,21 @@
 # 控制面板容器: 一个应用 = Web 控制台 + 应用内 pipeline 循环。
-# 从源码运行(PYTHONPATH=/app/src), 这样 config 的 ROOT 解析到 /app(config/ 与 data/ 都在那)。
+# 从源码运行(PYTHONPATH=/app/src), 这样 config 的 ROOT 解析到 /app(data/ 在那)。
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# 运行期依赖(不 pip install 本包, 避免 site-packages 破坏 ROOT 路径)
-RUN pip install --no-cache-dir \
-    'feedparser>=6.0' 'trafilatura>=1.12' \
-    'psycopg[binary]>=3.2.10' 'fastapi>=0.115' 'uvicorn[standard]>=0.34' \
-    'jinja2>=3.1' 'python-multipart>=0.0.9'
+# uv: 从官方镜像拷二进制, 仅构建期用来按 uv.lock 装依赖
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# 先只拷依赖声明命中缓存层; 只装依赖不装本包(保持从 /app/src 源码运行, 不破坏 ROOT)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
 
 COPY . .
-# PYTHONUNBUFFERED: docker logs 实时输出, 不被缓冲
-ENV PYTHONPATH=/app/src PYTHONUNBUFFERED=1
+# .venv/bin 优先 → python 即带依赖的 venv 解释器; PYTHONPATH 让 folia 从源码可导入
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app/src \
+    PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 # 面板(含循环)在应用内; 启停/间隔/配置/数据源都在面板里操作

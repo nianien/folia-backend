@@ -44,11 +44,9 @@ cmd_status() {
 }
 
 cmd_install() {  # 仅本地开发/跑测试用(容器运行不需要)
-  command -v python3 >/dev/null || { echo "✗ 需要 python3" >&2; exit 1; }
-  [ -d .venv ] || python3 -m venv .venv
-  .venv/bin/python -m pip install -U pip
-  .venv/bin/python -m pip install -e .
-  echo "dev 环境就绪: PYTHONPATH=src .venv/bin/python -m folia.pipeline.cli ..."
+  command -v uv >/dev/null || { echo "✗ 需要 uv (brew install uv 或 https://astral.sh/uv)" >&2; exit 1; }
+  uv sync   # 建 .venv 并按 uv.lock 装依赖 + 本包(editable)
+  echo "dev 环境就绪: uv run python -m folia.pipeline.cli ...  /  uv run python -m unittest discover -s tests"
 }
 
 cmd_help() {
@@ -60,7 +58,7 @@ folia.sh — 起停整套 (rsshub + 控制面板)
   start     构建并拉起 rsshub + 控制面板(http://localhost:8000)
   stop      停止整套(数据在 ./data, 不丢)
   status    容器 + 端口探测
-  install   本地 dev 环境(venv + pip install -e ., 跑测试用)
+  install   本地 dev 环境(uv sync, 跑测试用)
   help      本帮助
 
 日常操作都在控制面板里: 配置凭据/间隔、启停循环、立即跑、管数据源、看预览。

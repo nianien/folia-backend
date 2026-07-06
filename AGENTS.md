@@ -10,20 +10,18 @@ Do not commit local environment directories such as `.venv/`, generated caches, 
 
 ## Build, Test, and Development Commands
 
-Use Python 3 from a virtual environment:
+Dependencies are managed with [uv](https://astral.sh/uv) (`uv.lock` pins versions):
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+uv sync                          # create .venv, install from uv.lock + the package
 # offline editorial layer against a local feed fixture:
-folia-pipeline init-db
-folia-pipeline ingest-fixture tests/fixtures/sample_feed.xml
+uv run folia-pipeline init-db
+uv run folia-pipeline ingest-fixture tests/fixtures/sample_feed.xml
 # full run (needs RSSHub up for rsshub-backed feeds; see README):
-folia-pipeline run-once
+uv run folia-pipeline run-once
 ```
 
-Without editable install, run commands with `PYTHONPATH=src`, for example `PYTHONPATH=src python -m folia.pipeline.cli init-db`.
+`uv run <cmd>` runs inside the project venv.
 
 ## Coding Style & Naming Conventions
 
@@ -35,7 +33,7 @@ Prefer clear, boring names that match the domain: `articles`, `clusters`, `polle
 
 Tests use Python `unittest` and live under `tests/`. Name files `test_<module>.py` and test methods `test_<behavior>()`.
 
-Run tests with `PYTHONPATH=src python -m unittest discover -s tests`. Keep fixtures small and deterministic.
+Run tests with `uv run python -m unittest discover -s tests`. Keep fixtures small and deterministic.
 
 ## Commit & Pull Request Guidelines
 

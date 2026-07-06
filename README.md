@@ -29,15 +29,16 @@ functions fall back to deterministic heuristics.
 
 ## Setup (pipeline)
 
-Standard `src/` layout + `pyproject.toml`.
+Standard `src/` layout + `pyproject.toml`; dependencies are managed with
+[uv](https://astral.sh/uv) (`uv.lock` pins exact versions).
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+uv sync                 # create .venv, install deps from uv.lock + the package (editable)
+uv run folia-pipeline panel --port 8000
 ```
 
-For direct execution without installation, prefix commands with `PYTHONPATH=src`.
+`uv run <cmd>` runs inside the project venv. Prefix with `PYTHONPATH=src` only if
+running the source directly without `uv`.
 
 ## Configuration
 
@@ -83,16 +84,16 @@ folia-pipeline ingest-fixture tests/fixtures/sample_feed.xml
 `ingest-fixture` treats a local feed file as one source and runs it through the
 poller + editorial layer offline (no network).
 
-Without editable install:
+Without the console script:
 
 ```bash
-PYTHONPATH=src python -m folia.pipeline.cli run-once
+uv run python -m folia.pipeline.cli run-once
 ```
 
 ## Tests
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests
+uv run python -m unittest discover -s tests
 ```
 
 All tests run offline (stdlib `unittest`, tempfile SQLite, no network).
