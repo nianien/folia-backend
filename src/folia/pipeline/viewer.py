@@ -293,9 +293,29 @@ def render_cluster_detail(conn: sqlite3.Connection, cluster_id: int) -> str | No
     image = cluster_image(conn, cluster_id)
     published = (rep["published_at"] if rep else None) or cluster["updated_at"]
 
-    body_html = render_synthesis(cluster["synthesized_text"] or "") or (
-        '<p class="empty">尚未生成综述。</p>'
-    )
+    keys = cluster.keys()
+    zh = cluster["synthesis_zh"] if "synthesis_zh" in keys else None
+    en = cluster["synthesis_en"] if "synthesis_en" in keys else None
+    if zh and en:  # 双语: 中/EN 切换
+        body_html = (
+            "<style>.langbar{display:flex;gap:6px;margin-bottom:12px}"
+            ".langbtn{padding:3px 12px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}"
+            ".langbtn.on{background:#333;color:#fff;border-color:#333}</style>"
+            '<div class="langbar">'
+            '<button type="button" class="langbtn on" data-lang="zh" onclick="foliaLang(\'zh\')">中文</button>'
+            '<button type="button" class="langbtn" data-lang="en" onclick="foliaLang(\'en\')">EN</button>'
+            "</div>"
+            f'<div class="langbody" data-lang="zh">{render_synthesis(zh)}</div>'
+            f'<div class="langbody" data-lang="en" style="display:none">{render_synthesis(en)}</div>'
+            "<script>function foliaLang(l){"
+            "document.querySelectorAll('.langbody').forEach(function(b){b.style.display=(b.dataset.lang===l)?'':'none';});"
+            "document.querySelectorAll('.langbtn').forEach(function(x){x.classList.toggle('on',x.dataset.lang===l);});"
+            "}</script>"
+        )
+    else:
+        body_html = render_synthesis(cluster["synthesized_text"] or "") or (
+            '<p class="empty">尚未生成综述。</p>'
+        )
     lead = lead_media(image)
     if cluster["source_count"] and cluster["source_count"] > 1:
         source_label = f"{cluster['source_count']} 个来源"

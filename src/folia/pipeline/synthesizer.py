@@ -27,19 +27,21 @@ def synthesize_pending(conn: sqlite3.Connection, model_client: ModelClient | Non
     ]
     changed = 0
     for cluster_id in cluster_ids:
-        markdown, model_name = synthesize_cluster(conn, cluster_id, model_client)
-        if not markdown:
+        text, zh, en, model_name = synthesize_cluster(conn, cluster_id, model_client)
+        if not text:
             continue
         conn.execute(
             """
             UPDATE clusters
             SET synthesized_text=?,
+                synthesis_zh=?,
+                synthesis_en=?,
                 synthesis_status='ok',
                 synthesis_model=?,
                 synthesis_updated_at=CURRENT_TIMESTAMP
             WHERE id=?
             """,
-            (markdown, model_name, cluster_id),
+            (text, zh, en, model_name, cluster_id),
         )
         changed += 1
     conn.commit()
@@ -50,7 +52,12 @@ def synthesize_cluster(
     conn: sqlite3.Connection,
     cluster_id: int,
     model_client: ModelClient | None = None,
-) -> tuple[str | None, str]:
+) -> tuple[str | None, str | None, str | None, str]:
+    """返回 (synthesized_text, synthesis_zh, synthesis_en, model_name)。
+
+    走模型时生成中/英两版(synthesized_text 取中文版, 兼容既有读取);
+    走规则时只有单版(zh/en 为 None, 无双语切换)。
+    """
     rows = list(
         conn.execute(
             """
@@ -64,7 +71,7 @@ def synthesize_cluster(
         )
     )
     if not rows:
-        return None, "none"
+        return None, None, None, "none"
 
     fact_packages = []
     for row in rows:
@@ -83,15 +90,23 @@ def synthesize_cluster(
             for row in rows
         ]
         try:
-            markdown = model_client.complete(
-                SYNTHESIS_SYSTEM_PROMPT,
-                synthesis_user_prompt(title, fact_packages, sources),
+            zh = ensure_sources(
+                model_client.complete(
+                    SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt(title, fact_packages, sources, "zh")
+                ),
+                rows,
             )
-            return ensure_sources(markdown, rows), model_client.model_name
+            en = ensure_sources(
+                model_client.complete(
+                    SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt(title, fact_packages, sources, "en")
+                ),
+                rows,
+            )
+            return zh, zh, en, model_client.model_name
         except ModelError:
             pass
 
-    return synthesize_cluster_heuristic(rows, fact_packages, title), "heuristic-v1"
+    return synthesize_cluster_heuristic(rows, fact_packages, title), None, None, "heuristic-v1"
 
 
 def synthesize_cluster_heuristic(rows: list[sqlite3.Row], fact_packages: list[dict], title: str) -> str:

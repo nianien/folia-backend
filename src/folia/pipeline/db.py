@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS clusters (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   synthesized_text TEXT,
+  synthesis_zh TEXT,
+  synthesis_en TEXT,
   synthesis_status TEXT,
   synthesis_model TEXT,
   synthesis_updated_at TEXT,
@@ -109,8 +111,17 @@ def connect(path: Path) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
     seed_default_directories(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """给既有库补新列(CREATE TABLE IF NOT EXISTS 不会给已存在的表加列)。幂等。"""
+    have = {r[1] for r in conn.execute("PRAGMA table_info(clusters)")}
+    for col in ("synthesis_zh", "synthesis_en"):
+        if col not in have:
+            conn.execute(f"ALTER TABLE clusters ADD COLUMN {col} TEXT")
 
 
 def seed_default_directories(conn: sqlite3.Connection) -> int:

@@ -46,8 +46,19 @@ def fact_user_prompt(article: dict) -> str:
 """
 
 
-def synthesis_user_prompt(title: str, fact_packages: list[dict], sources: list[dict]) -> str:
+SYNTHESIS_LANG_DIRECTIVE = {
+    "zh": "整篇正文用简体中文输出（Sources 段的来源名与链接保持原样，不翻译）。",
+    "en": "Write the entire article in English (keep the source names and URLs in the Sources section unchanged).",
+}
+
+
+def synthesis_user_prompt(
+    title: str, fact_packages: list[dict], sources: list[dict], language: str = "zh"
+) -> str:
+    directive = SYNTHESIS_LANG_DIRECTIVE.get(language, SYNTHESIS_LANG_DIRECTIVE["zh"])
     return f"""请基于以下同一事件的多源事实包，生成压缩完整稿。
+
+语言要求: {directive}
 
 建议结构:
 # 事件标题
