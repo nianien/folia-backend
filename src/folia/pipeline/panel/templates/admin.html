@@ -135,22 +135,17 @@
 <div class="tabpane" id="tab-models">
   <div class="card">
     <h3 style="margin-top:0">功能模型</h3>
-    <div class="hint">每个功能各选一家供应商与模型。分类/综述/事实的供应商选「规则（不用模型）」则走本地规则（免费、快）。
-      模型是各供应商的预置候选（要加别的在 <code>config.PROVIDER_MODELS</code> 里改）。
+    <div class="hint">每个功能选一家供应商 + 模型。模型可从下拉建议里选，也可直接输入任意模型名（如 <code>qwen3.6:35b-a3b</code>）。
+      供应商选「规则（不用模型）」则走本地规则（免费、快）；模型没装/不存在则调用报错并退回规则。
       远程供应商的 API key 从环境变量读（<code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> /
       <code>GEMINI_API_KEY</code> / <code>DEEPSEEK_API_KEY</code> / <code>DASHSCOPE_API_KEY</code> /
       <code>XIN_API_KEY</code>），不在页面配置。</div>
     <form method="post" action="/admin/models">
       <label>聚类向量（embedding）</label>
       <div class="hint">算文章相似度、聚类。固定走本地 Ollama。</div>
-      <select name="embedding" style="width:100%">
-        {% if embedding_model and embedding_model not in embed_models %}
-        <option value="{{ embedding_model }}" selected>{{ embedding_model }}</option>
-        {% endif %}
-        {% for m in embed_models %}
-        <option value="{{ m }}" {{ 'selected' if embedding_model==m else '' }}>{{ m }}</option>
-        {% endfor %}
-      </select>
+      <input type="text" name="embedding" list="embed-models" value="{{ embedding_model }}"
+             placeholder="模型名，可下拉选或直接填" style="width:100%">
+      <datalist id="embed-models">{% for m in embed_models %}<option value="{{ m }}">{% endfor %}</datalist>
       <div style="height:16px"></div>
 
       {% set labels = {'categorize':'新闻分类','synthesis':'综述生成','facts':'事实抽取'} %}
@@ -167,15 +162,9 @@
           <option value="{{ name }}" {{ 'selected' if cur.provider==name else '' }}>{{ label }}</option>
           {% endfor %}
         </select>
-        <select name="{{ fn }}_model" style="flex:1" {{ 'disabled' if not cur.provider else '' }}>
-          {% if not cur.provider %}<option value="">—</option>{% endif %}
-          {% if cur.model and cur.model not in opts %}
-          <option value="{{ cur.model }}" selected>{{ cur.model }}</option>
-          {% endif %}
-          {% for m in opts %}
-          <option value="{{ m }}" {{ 'selected' if cur.model==m else '' }}>{{ m }}</option>
-          {% endfor %}
-        </select>
+        <input type="text" name="{{ fn }}_model" list="{{ fn }}-models" value="{{ cur.model }}"
+               placeholder="模型名，可下拉选或直接填" style="flex:1">
+        <datalist id="{{ fn }}-models">{% for m in opts %}<option value="{{ m }}">{% endfor %}</datalist>
       </div>
       <div style="height:16px"></div>
       {% endfor %}
@@ -188,21 +177,18 @@
     var PROVIDER_MODELS = {{ provider_models | tojson }};
     var CHAT_FNS = {{ chat_functions | tojson }};
     function q(name){ return document.querySelector('[name="' + name + '"]'); }
-    function fill(fn){
-      var prov = q(fn + '_provider').value, sel = q(fn + '_model');
-      while(sel.firstChild) sel.removeChild(sel.firstChild);
-      if(!prov){  // 规则(不用模型)
-        var o = document.createElement('option'); o.value=''; o.textContent='—';
-        sel.appendChild(o); sel.disabled = true; return;
-      }
-      sel.disabled = false;
+    // 换供应商时，重建该功能模型输入框的下拉建议（datalist）；输入框本身仍可自由填
+    function fillList(fn){
+      var prov = q(fn + '_provider').value;
+      var dl = document.getElementById(fn + '-models');
+      while(dl.firstChild) dl.removeChild(dl.firstChild);
       (PROVIDER_MODELS[prov] || []).forEach(function(m){
-        var o = document.createElement('option'); o.value=m; o.textContent=m; sel.appendChild(o);
+        var o = document.createElement('option'); o.value = m; dl.appendChild(o);
       });
     }
     CHAT_FNS.forEach(function(fn){
       var p = q(fn + '_provider');
-      if(p) p.addEventListener('change', function(){ fill(fn); });
+      if(p) p.addEventListener('change', function(){ fillList(fn); });
     });
   })();
   </script>
