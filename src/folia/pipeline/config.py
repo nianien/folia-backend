@@ -60,7 +60,7 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "deepseek": ["deepseek-v4-flash", "deepseek-v4-pro"],
     "qwen": ["qwen3.6-flash", "qwen3.7-plus"],
     "xinapi": ["gpt-5.4-mini", "claude-sonnet-5", "gemini-3.5-flash"],
-    "ollama": ["qwen3.5:9b", "qwen3:14b", "gemma4:12b", "gemma3:4b"],
+    "ollama": ["qwen3.6:35b-a3b", "qwen3.5:9b", "qwen3:14b", "gemma4:12b", "gemma3:4b"],
 }
 
 # embedding 固定本地 Ollama 的预置候选(嵌入模型, 与 chat 模型不同)。
@@ -86,6 +86,7 @@ def _defaults() -> dict[str, Any]:
             "timeout_seconds": 120,
             "temperature": 0.2,
             "max_output_tokens": 3000,
+            "num_ctx": 8192,  # 仅本地 Ollama 生效; 不设则默认开 32K, 大模型在小内存机上会溢出到 swap
         },
         # 各供应商的 endpoint 与 API key; key 默认取历史环境变量, 配置页可覆盖并落库。
         "providers": {

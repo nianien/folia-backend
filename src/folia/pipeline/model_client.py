@@ -38,6 +38,7 @@ class ModelConfig:
     timeout_seconds: int
     temperature: float
     max_output_tokens: int
+    num_ctx: int  # 仅本地 Ollama 生效
 
 
 class ModelClient:
@@ -85,6 +86,7 @@ class ModelClient:
             "options": {
                 "temperature": self.config.temperature,
                 "num_predict": self.config.max_output_tokens,
+                "num_ctx": self.config.num_ctx,  # 显式限定上下文, 否则 Ollama 默认 32K 会撑爆小内存机
             },
         }
         data = self._post(f"{self.config.endpoint}/api/chat", payload)
@@ -202,5 +204,6 @@ def create_model_client(settings: dict[str, Any], function: str = "synthesis") -
             timeout_seconds=int(model_cfg.get("timeout_seconds", 120)),
             temperature=float(model_cfg.get("temperature", 0.2)),
             max_output_tokens=int(model_cfg.get("max_output_tokens", 3000)),
+            num_ctx=int(model_cfg.get("num_ctx", 8192)),
         )
     )

@@ -10,7 +10,7 @@ def _client(provider: str = "", model: str = "", api_key: str = "", endpoint: st
     return ModelClient(
         ModelConfig(
             provider=provider, model=model, endpoint=endpoint, api_key=api_key,
-            timeout_seconds=30, temperature=0.2, max_output_tokens=1000,
+            timeout_seconds=30, temperature=0.2, max_output_tokens=1000, num_ctx=8192,
         )
     )
 
