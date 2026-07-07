@@ -88,14 +88,6 @@ def add_directory(
         "color=excluded.color, sort_order=excluded.sort_order",
         (name, parent, description, color or "#7a6f5c", sort_order),
     )
-    if not parent:  # 新增一级 → 自动补默认二级 "综合"
-        from ..config import DEFAULT_SUBCATEGORY
-
-        conn.execute(
-            "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
-            "VALUES (?,?,?,?,?)",
-            (DEFAULT_SUBCATEGORY, name, "", color or "#7a6f5c", 99),
-        )
     conn.commit()
 
 

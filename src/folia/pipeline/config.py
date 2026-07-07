@@ -15,7 +15,6 @@ from typing import Any
 # repo root: src/folia/pipeline/config.py → 上 3 层
 ROOT = Path(__file__).resolve().parents[3]
 
-
 # 默认订阅源: (feed_url, 名称, 一句话描述)。feed 表为空时播种(db.seed_default_feeds)。
 # 原始 RSS/Atom 地址(自写轮询器直接抓, 全文交给 trafilatura)。分类由内容决定, 不挂在源上。
 DEFAULT_FEEDS: list[tuple[str, str, str]] = [
@@ -27,46 +26,41 @@ DEFAULT_FEEDS: list[tuple[str, str, str]] = [
     ("http://rsshub:1200/latepost", "LatePost", "晚点 LatePost,中文科技与商业报道"),
 ]
 
-# 默认新闻分类(两级): (名称, 父级, 描述, 颜色, 排序)。父级 "" = 一级; 否则 = 所属一级名。
-# 每个一级都带一个默认二级 "综合", 收该一级下不好归类的新闻; 用户可在「新闻分类」页增删改。
+# 默认新闻分类: (名称, 父级, 描述, 颜色, 排序)。父级 "" = 一级; 否则 = 所属一级名。
+# 只播一级; 二级由用户在「新闻分类」页按需加。分类结果可停在一级(归不到二级时)或到二级。
 DEFAULT_DIRECTORIES: list[tuple[str, str, str, str, int]] = [
-    # 一级
-    ("国际", "", "国际 / 世界新闻", "#c2371d", 1),
-    ("科技", "", "科技 / 互联网 / AI", "#1d6f6b", 2),
-    ("中国", "", "中国相关", "#9c4722", 3),
-    ("综合", "", "其他 / 未归类(兜底)", "#7a6f5c", 99),
-    # 各一级的默认二级 "综合"
-    ("综合", "国际", "国际里暂不好归类的", "#c2371d", 99),
-    ("综合", "科技", "科技里暂不好归类的", "#1d6f6b", 99),
-    ("综合", "中国", "中国里暂不好归类的", "#9c4722", 99),
-    ("综合", "综合", "未归类", "#7a6f5c", 99),
+    ("国际", "", "国际 / 世界新闻", "#0f9d76", 1),
+    ("科技", "", "科技 / 互联网 / AI", "#1f8fb3", 2),
+    ("中国", "", "中国相关", "#2a9d8f", 3),
+    ("综合", "", "综合 / 未归类", "#6d7c75", 99),
 ]
 
-DEFAULT_SUBCATEGORY = "综合"  # 每个一级的兜底二级名
-
+FALLBACK_CATEGORY = "综合"  # 彻底归不了时落这个一级
 
 # 支持的 LLM 供应商(下拉顺序)。ollama 是本地(无 key)。openai/deepseek/qwen/xinapi 走
 # OpenAI 兼容 chat/completions; claude 走 messages; gemini 走 generateContent。
 # (显示名, 默认 endpoint, 历史 API key 环境变量名)。key 默认回退该环境变量, 配置页可覆盖。
 PROVIDERS: list[tuple[str, str, str, str]] = [
+    ("ollama", "Ollama(本地)", os.environ.get("OLLAMA_URL", "http://localhost:11434"), ""),
     ("openai", "OpenAI", "https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY"),
     ("claude", "Claude", "https://api.anthropic.com/v1/messages", "ANTHROPIC_API_KEY"),
     ("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta", "GEMINI_API_KEY"),
     ("deepseek", "DeepSeek", "https://api.deepseek.com/v1/chat/completions", "DEEPSEEK_API_KEY"),
     ("qwen", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "DASHSCOPE_API_KEY"),
     ("xinapi", "XinAPI", "https://airouter.xincache.cn/v1/chat/completions", "XIN_API_KEY"),
-    ("ollama", "Ollama(本地)", os.environ.get("OLLAMA_URL", "http://localhost:11434"), ""),
 ]
 
-# 各 provider 的预置候选模型(面板下拉用; 要别的在这里加)。
+# 各 provider 的预置候选模型(面板下拉用; 只是建议, 可直接填任意名)。
+# 精简为当前主力型号: 便宜快的做事实抽取, 中高档做成稿, 旗舰做质量对照。
+# xinapi 是中转/聚合渠道, 列的是它转发的当前型号名(注意: 同名未必是原厂同版本)。
 PROVIDER_MODELS: dict[str, list[str]] = {
-    "openai": ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1", "gpt-4o"],
-    "claude": ["claude-3-5-haiku-latest", "claude-3-5-sonnet-latest"],
-    "gemini": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
-    "qwen": ["qwen-plus", "qwen-turbo", "qwen-max"],
-    "xinapi": ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "gemini-2.0-flash", "gemini-1.5-pro"],
-    "ollama": ["qwen3.6:35b-a3b", "qwen3:14b", "qwen3:8b", "qwen3:4b", "gemma4:12b", "gemma3:4b"],
+    "openai": ["gpt-4.1-mini", "gpt-5.4-mini"],
+    "claude": ["claude-haiku-4-5", "claude-sonnet-5"],
+    "gemini": ["gemini-3.5-flash"],
+    "deepseek": ["deepseek-v4-flash", "deepseek-v4-pro"],
+    "qwen": ["qwen3.6-flash", "qwen3.7-plus"],
+    "xinapi": ["gpt-5.4-mini", "claude-sonnet-5", "gemini-3.5-flash"],
+    "ollama": ["qwen3.5:9b", "qwen3:14b", "gemma4:12b", "gemma3:4b"],
 }
 
 # embedding 固定本地 Ollama 的预置候选(嵌入模型, 与 chat 模型不同)。
@@ -101,13 +95,12 @@ def _defaults() -> dict[str, Any]:
             }
             for name, _label, endpoint, key_env in PROVIDERS
         },
-        # 各功能选 provider + 模型。embedding 走本地 Ollama(只填模型名);
-        # categorize/synthesis/facts 的 provider 为空 = 规则(不用模型)。
+        # 各功能选 provider + 模型。默认全走本地 Ollama(这是个 AI 项目, 最低也用本地模型)。
         "models": {
             "embedding": "bge-m3",
-            "categorize": {"provider": "ollama", "model": "gemma3:4b"},
-            "synthesis": {"provider": "", "model": ""},
-            "facts": {"provider": "", "model": ""},
+            "categorize": {"provider": "ollama", "model": "qwen3.5:9b"},
+            "synthesis": {"provider": "ollama", "model": "qwen3.5:9b"},
+            "facts": {"provider": "ollama", "model": "qwen3.5:9b"},
         },
         "loop": {"enabled": False, "interval": 1800},
     }

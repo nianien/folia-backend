@@ -3,56 +3,111 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Folia 控制面板</title>
+<title>Folia 控制台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
 <style>
-  :root { --ink:#1b1714; --paper:#f4eedf; --line:#d8cdb8; --accent:#c2371d; --muted:#8a7d68; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--paper); color:var(--ink);
-    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif; }
-  header { border-bottom:2px solid var(--ink); }
-  .bar { max-width:960px; margin:0 auto; padding:14px 20px; display:flex; align-items:baseline; gap:20px; }
-  .brand { font-weight:800; letter-spacing:.05em; }
-  nav a { color:var(--muted); text-decoration:none; margin-right:16px; font-size:14px; }
-  nav a.active, nav a:hover { color:var(--accent); }
-  main { max-width:960px; margin:24px auto; padding:0 20px; }
-  h1 { font-size:22px; margin:0 0 18px; }
-  .card { background:#fffaf0; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:18px; }
-  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
-  input[type=text], input[type=password], input[type=number] {
-    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; font:inherit; }
-  button { font:inherit; font-weight:600; padding:9px 16px; border:1px solid var(--ink); border-radius:8px;
-    background:var(--ink); color:var(--paper); cursor:pointer; }
-  button.ghost { background:#fff; color:var(--ink); }
-  button.danger { background:#fff; color:var(--accent); border-color:var(--accent); }
-  .pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:700; }
-  .on { background:#dff0d8; color:#2d6a2d; } .off { background:#f2e2e0; color:#a33; }
-  .muted { color:var(--muted); } .msg { color:#2d6a2d; font-weight:600; }
-  .hint { font-size:12px; color:var(--muted); margin:2px 0 10px; }
-  .hint b { color:var(--ink); font-weight:600; }
-  .sec { margin-bottom:30px; }
-  .sec-head { display:flex; align-items:center; justify-content:space-between; gap:12px;
-    border-bottom:2px solid var(--ink); padding-bottom:8px; margin-bottom:14px; }
-  .sec-head h2 { font-size:15px; margin:0; letter-spacing:.03em; }
-  .sec-head form { margin:0; }
-  .kv { display:flex; gap:10px; padding:3px 0; font-size:14px; }
-  .kv .k { color:var(--muted); min-width:44px; }
-  .subform { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
-  .tabbar { display:flex; gap:4px; border-bottom:2px solid var(--ink); margin-bottom:20px; flex-wrap:wrap; }
-  .tabbar a { padding:8px 16px; color:var(--muted); text-decoration:none; font-size:14px; font-weight:600;
-    border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; cursor:pointer; }
-  .tabbar a.active { color:var(--ink); background:#fffaf0; border-color:var(--line); border-bottom:2px solid #fffaf0; }
-  .tabpane { display:none; }
-  select { padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; font:inherit; min-width:220px; }
-  .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:middle; margin-right:6px; }
-  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:14px; }
-  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
-  code { background:#efe7d6; padding:1px 5px; border-radius:4px; font-size:13px; }
+  :root{
+    --ink:#1e2620; --paper:#f5f9f7; --surface:#fbfefc; --line:#e2ece7;
+    --accent:#0f9d76; --accent-soft:#daf1e9; --muted:#748179;
+    --ok:#2d6a2d; --ok-soft:#e6f0da; --danger:#a4331d; --danger-soft:#f4e4e1;
+    --radius:12px;
+    --serif:"Noto Serif SC",Georgia,serif;
+    --sans:"Noto Sans SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --label:"Archivo","Noto Sans SC",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;color:var(--ink);
+    background-color:#f5f9f7;
+    background-image:radial-gradient(1200px 520px at 80% -12%, #ffffff 0%, rgba(255,255,255,0) 60%),
+      linear-gradient(180deg,#fbfefc 0%, #eef5f1 100%);
+    background-attachment:fixed;
+    font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent)}
+
+  header{border-bottom:2px solid var(--accent);background:rgba(255,253,249,.6)}
+  .bar{max-width:920px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;gap:22px}
+  .brand{font-family:var(--label);font-weight:800;letter-spacing:.24em;font-size:13px;text-transform:uppercase}
+  .bar nav{margin-left:auto}
+  .bar nav a{font-family:var(--label);color:var(--muted);text-decoration:none;margin-left:20px;
+    font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+  .bar nav a.active,.bar nav a:hover{color:var(--accent)}
+  main{max-width:920px;margin:26px auto 64px;padding:0 24px}
+  h1{font-family:var(--serif);font-size:26px;font-weight:900;letter-spacing:.02em;margin:0 0 20px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;margin-bottom:16px;box-shadow:0 1px 2px rgba(27,23,20,.05)}
+  .card h3{font-family:var(--serif);margin:0 0 14px;font-size:17px;font-weight:700}
+
+  label{display:block;font-family:var(--label);font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+  input[type=text],input[type=password],input[type=number],select{
+    width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;
+    font:inherit;color:var(--ink)}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  select{min-width:170px;appearance:none;padding-right:30px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23748179' d='M6 8.5 2 4.5h8z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 11px center}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+  button{font:inherit;font-weight:700;font-size:13px;padding:9px 17px;border:1px solid var(--ink);
+    border-radius:8px;background:var(--ink);color:var(--paper);cursor:pointer}
+  button:hover{background:#000}
+  button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+  button.ghost:hover{border-color:var(--muted)}
+  button.danger{background:#fff;color:var(--danger);border-color:#dcc0bb}
+  button.danger:hover{background:var(--danger-soft);border-color:var(--danger)}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 12px;border-radius:999px;
+    font-family:var(--label);font-size:11px;font-weight:700;letter-spacing:.05em}
+  .pill.on{background:var(--ok-soft);color:var(--ok)} .pill.off{background:#e2e9e5;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .pill.on .dot{animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  @media (prefers-reduced-motion:reduce){.pill.on .dot{animation:none}}
+
+  .muted{color:var(--muted)}
+  .hint{font-size:12.5px;color:var(--muted);margin:3px 0 12px}
+  code{font-family:ui-monospace,Menlo,monospace;background:#e8efeb;padding:1px 6px;border-radius:5px;font-size:12.5px}
+  .kv{display:flex;gap:12px;padding:5px 0;font-size:14px}
+  .kv .k{color:var(--muted);min-width:52px;font-family:var(--label);font-size:12px;font-weight:600;
+    letter-spacing:.04em;text-transform:uppercase}
+  .subform{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .msg{background:var(--ok-soft);color:var(--ok);border:1px solid #c8dcaf;border-radius:9px;
+    padding:10px 14px;font-weight:600;font-size:13px;margin-bottom:14px}
+
+  .tabbar{display:flex;gap:5px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+  .tabbar a{font-family:var(--label);padding:8px 16px;color:var(--muted);text-decoration:none;font-size:12px;
+    font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:999px;cursor:pointer;margin-bottom:6px}
+  .tabbar a.active{background:var(--accent-soft);color:var(--accent)}
+  .tabbar a:hover:not(.active){color:var(--accent)}
+  .tabpane{display:none}
+
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:middle;margin-right:7px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);font-size:13px}
+  th{font-family:var(--label);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+
+  .cat{border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:10px;background:#fbfefc}
+  .cat-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .cat-name{font-weight:700}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:#e8efeb;border:1px solid var(--line);
+    border-radius:999px;padding:3px 6px 3px 11px;font-size:12.5px}
+  .chip form{margin:0;display:inline}
+  .chip .x{padding:0;width:17px;height:17px;line-height:1;border-radius:50%;border:none;
+    background:transparent;color:var(--muted);font-size:14px;font-weight:700;cursor:pointer}
+  .chip .x:hover{background:var(--danger-soft);color:var(--danger)}
+  .chip-add{display:inline-flex;margin:0}
+  .chip-add input{width:96px;padding:4px 9px;border-radius:999px;font-size:12.5px;border:1px dashed var(--line)}
 </style>
 </head>
 <body>
 <header><div class="bar">
-  <span class="brand">FOLIA 控制面板</span>
+  <span class="brand">头版 · Folia 控制台</span>
   <nav>
     <a href="/">预览</a>
     <a href="/admin" class="{{ 'active' if nav=='admin' else '' }}">设置</a>

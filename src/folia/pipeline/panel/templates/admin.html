@@ -14,9 +14,11 @@
 <!-- 抓取 -->
 <div class="tabpane" id="tab-fetch">
   <div class="card">
-    <div class="kv"><span class="k">状态</span><span>
-      {{ '抓取中…' if status.busy else ('循环运行中' if enabled else '已停止') }}
-      <span class="pill {{ 'on' if enabled else 'off' }}">{{ '运行中' if enabled else '已停止' }}</span></span></div>
+    <h3>抓取</h3>
+    <div class="kv"><span class="k">状态</span>
+      {% if status.busy %}<span class="pill on"><span class="dot"></span>抓取中</span>
+      {% elif enabled %}<span class="pill on"><span class="dot"></span>循环运行中</span>
+      {% else %}<span class="pill off">已停止</span>{% endif %}</div>
     <div class="kv"><span class="k">上次</span><span class="muted">{{ status.last_message }}{% if status.last_run %} · {{ status.last_run }}{% endif %}</span></div>
     <div class="row" style="margin-top:14px">
       {% if enabled %}
@@ -28,7 +30,7 @@
     </div>
     <form method="post" action="/admin/interval" class="subform">
       <label>抓取间隔（秒）</label>
-      <div class="hint">每隔多久自动抓取一次，1800 秒约半小时。</div>
+      <div class="hint">1800 秒 ≈ 半小时。</div>
       <div class="row">
         <input type="number" name="loop_interval" min="5" value="{{ interval }}" style="max-width:220px">
         <button class="ghost">保存</button>
@@ -42,7 +44,7 @@
   <div class="card">
     <form method="post" action="/admin/database">
       <label>云端数据库</label>
-      <div class="hint">把聚合结果同步到云端 Neon 数据库；留空则只保存在本地。</div>
+      <div class="hint">同步到云端 Neon；留空只存本地。</div>
       <div class="row">
         <input type="text" name="database_url" value="{{ database_url }}"
                placeholder="postgres://用户:密码@主机/库名" style="flex:1;min-width:260px">
@@ -55,7 +57,7 @@
 <!-- 数据源 -->
 <div class="tabpane" id="tab-sources">
   <div class="card">
-    <div class="hint">源只管“从哪抓”；新闻的分类由内容自动判定，不在这里配置。</div>
+    <div class="hint">只填抓取地址；分类由内容自动判定。</div>
     <form method="post" action="/admin/sources/add">
       <div class="row">
         <input type="text" name="feed_url" placeholder="地址（RSS / Atom URL）" style="flex:2;min-width:240px">
@@ -94,74 +96,58 @@
   </div>
 </div>
 
-<!-- 新闻分类(两级) -->
+<!-- 新闻分类 -->
 <div class="tabpane" id="tab-directory">
   <div class="card">
-    <div class="hint">两级分类:一级 + 二级。聚合后的新闻由模型按内容归到「一级/二级」;归不到具体二级时落该一级的「综合」。
-      新增一级会自动带一个「综合」二级。这套分类同时决定预览页的嵌套标签。</div>
-    <form method="post" action="/admin/directory/add">
-      <input type="hidden" name="parent" value="">
-      <div class="row">
-        <input type="text" name="name" placeholder="新增一级分类名（如 财经）" style="flex:1;min-width:140px">
-        <input type="text" name="description" placeholder="描述（帮模型判断）" style="flex:2;min-width:200px">
-        <input type="color" name="color" value="#7a6f5c" title="标签颜色" style="width:48px;padding:2px">
-        <input type="number" name="sort_order" value="50" title="排序" style="max-width:90px">
-        <button>加一级</button>
+    <h3>新闻分类</h3>
+    <div class="hint">一级下可加二级；归不到二级的新闻停在一级。二级名回车即添加。</div>
+    {% for top in directories %}
+    <div class="cat">
+      <div class="cat-head">
+        <span class="cat-name"><span class="swatch" style="background:{{ top.color }}"></span>{{ top.name }}</span>
+        <form method="post" action="/admin/directory/remove">
+          <input type="hidden" name="name" value="{{ top.name }}"><input type="hidden" name="parent" value="">
+          <button class="danger" onclick="return confirm('删除「{{ top.name }}」及其全部二级？')">删除</button>
+        </form>
       </div>
-    </form>
-  </div>
-  {% for top in directories %}
-  <div class="card">
-    <div class="row" style="align-items:center;justify-content:space-between">
-      <b><span class="swatch" style="background:{{ top.color }}"></span>{{ top.name }}
-        <span class="muted" style="font-weight:normal">{{ top.description or '' }}</span></b>
-      <form method="post" action="/admin/directory/remove">
-        <input type="hidden" name="name" value="{{ top.name }}"><input type="hidden" name="parent" value="">
-        <button class="danger" onclick="return confirm('删除一级「{{ top.name }}」及其全部二级?')">删一级</button>
-      </form>
-    </div>
-    <table style="margin-top:8px">
-      <tbody>
-      {% for sub in top.subs %}
-        <tr>
-          <td>{{ top.name }} / <b>{{ sub.name }}</b></td>
-          <td class="muted">{{ sub.description or '—' }}</td>
-          <td><form method="post" action="/admin/directory/remove">
+      <div class="chips">
+        {% for sub in top.subs %}
+        <span class="chip">{{ sub.name }}
+          <form method="post" action="/admin/directory/remove">
             <input type="hidden" name="name" value="{{ sub.name }}"><input type="hidden" name="parent" value="{{ top.name }}">
-            <button class="danger">删除</button></form></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    <form method="post" action="/admin/directory/add" style="margin-top:8px">
-      <input type="hidden" name="parent" value="{{ top.name }}">
-      <div class="row">
-        <input type="text" name="name" placeholder="在「{{ top.name }}」下加二级（如 AI）" style="flex:1;min-width:160px">
-        <input type="text" name="description" placeholder="描述" style="flex:2;min-width:180px">
-        <input type="hidden" name="color" value="{{ top.color }}">
-        <button class="ghost">加二级</button>
+            <button class="x" title="删除">×</button>
+          </form>
+        </span>
+        {% endfor %}
+        <form class="chip-add" method="post" action="/admin/directory/add">
+          <input type="hidden" name="parent" value="{{ top.name }}"><input type="hidden" name="color" value="{{ top.color }}">
+          <input type="text" name="name" placeholder="+ 二级">
+        </form>
       </div>
+    </div>
+    {% else %}
+    <p class="muted">还没有分类，在下面加一个一级。</p>
+    {% endfor %}
+    <form class="subform row" method="post" action="/admin/directory/add">
+      <input type="hidden" name="parent" value="">
+      <input type="text" name="name" placeholder="新一级分类名" style="flex:1;min-width:150px">
+      <input type="color" name="color" value="#0e7490" title="颜色"
+             style="width:42px;height:38px;padding:2px;border:1px solid var(--line);border-radius:8px">
+      <button>添加一级</button>
     </form>
   </div>
-  {% else %}
-  <div class="card"><p class="muted">还没有分类。上面加一个一级。</p></div>
-  {% endfor %}
 </div>
 
 <!-- 模型 -->
 <div class="tabpane" id="tab-models">
   <div class="card">
     <h3 style="margin-top:0">功能模型</h3>
-    <div class="hint">每个功能选一家供应商 + 模型。模型可从下拉建议里选，也可直接输入任意模型名（如 <code>qwen3.6:35b-a3b</code>）。
-      供应商选「规则（不用模型）」则走本地规则（免费、快）；模型没装/不存在则调用报错并退回规则。
-      远程供应商的 API key 从环境变量读（<code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> /
-      <code>GEMINI_API_KEY</code> / <code>DEEPSEEK_API_KEY</code> / <code>DASHSCOPE_API_KEY</code> /
-      <code>XIN_API_KEY</code>），不在页面配置。</div>
+    <div class="hint">每个功能选供应商 + 模型;「规则」= 不用模型。</div>
     <form method="post" action="/admin/models">
       <label>聚类向量（embedding）</label>
-      <div class="hint">算文章相似度、聚类。固定走本地 Ollama。</div>
+      <div class="hint">用于聚类相似文章。</div>
       <input type="text" name="embedding" list="embed-models" value="{{ embedding_model }}"
-             placeholder="模型名，可下拉选或直接填" style="width:100%">
+             placeholder="模型名，可下拉选或直接填" autocomplete="off" style="width:100%">
       <datalist id="embed-models">{% for m in embed_models %}<option value="{{ m }}">{% endfor %}</datalist>
       <div style="height:16px"></div>
 
@@ -174,13 +160,12 @@
       <div class="hint">{{ hints[fn] }}</div>
       <div style="display:flex;gap:8px">
         <select name="{{ fn }}_provider" style="flex:0 0 40%">
-          <option value="" {{ 'selected' if not cur.provider else '' }}>规则（不用模型）</option>
           {% for name, label in provider_options %}
           <option value="{{ name }}" {{ 'selected' if cur.provider==name else '' }}>{{ label }}</option>
           {% endfor %}
         </select>
         <input type="text" name="{{ fn }}_model" list="{{ fn }}-models" value="{{ cur.model }}"
-               placeholder="模型名，可下拉选或直接填" style="flex:1">
+               placeholder="模型名，可下拉选或直接填" autocomplete="off" style="flex:1">
         <datalist id="{{ fn }}-models">{% for m in opts %}<option value="{{ m }}">{% endfor %}</datalist>
       </div>
       <div style="height:16px"></div>
@@ -194,18 +179,22 @@
     var PROVIDER_MODELS = {{ provider_models | tojson }};
     var CHAT_FNS = {{ chat_functions | tojson }};
     function q(name){ return document.querySelector('[name="' + name + '"]'); }
-    // 换供应商时，重建该功能模型输入框的下拉建议（datalist）；输入框本身仍可自由填
-    function fillList(fn){
+    // 换供应商: 重建下拉建议(datalist) + 把模型框值设为该家族第一个(可见地联动; 仍可自由改)
+    function fillList(fn, keepValue){
       var prov = q(fn + '_provider').value;
       var dl = document.getElementById(fn + '-models');
+      var input = q(fn + '_model');
+      var models = PROVIDER_MODELS[prov] || [];
       while(dl.firstChild) dl.removeChild(dl.firstChild);
-      (PROVIDER_MODELS[prov] || []).forEach(function(m){
+      models.forEach(function(m){
         var o = document.createElement('option'); o.value = m; dl.appendChild(o);
       });
+      if(!keepValue) input.value = models[0] || '';
     }
     CHAT_FNS.forEach(function(fn){
+      fillList(fn, true);  // 载入时按当前 provider 建好建议, 但保留已存的模型值
       var p = q(fn + '_provider');
-      if(p) p.addEventListener('change', function(){ fillList(fn); });
+      if(p) p.addEventListener('change', function(){ fillList(fn, false); });
     });
   })();
   </script>

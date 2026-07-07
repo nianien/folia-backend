@@ -81,6 +81,7 @@ class ModelClient:
                 {"role": "user", "content": user_prompt},
             ],
             "stream": False,
+            "think": False,  # 关掉 thinking(混合推理模型如 qwen3); 非 thinking 模型忽略此项
             "options": {
                 "temperature": self.config.temperature,
                 "num_predict": self.config.max_output_tokens,

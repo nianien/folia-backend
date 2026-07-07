@@ -143,16 +143,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "SELECT name, '', description, color, sort_order FROM directory_old"
         )
         conn.execute("DROP TABLE directory_old")
-        # 给每个已有一级补默认二级 "综合"
-        from .config import DEFAULT_SUBCATEGORY
-
-        tops = [r[0] for r in conn.execute("SELECT name FROM directory WHERE parent=''")]
-        for top in tops:
-            conn.execute(
-                "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
-                "SELECT ?, ?, '', color, 99 FROM directory WHERE name=? AND parent=''",
-                (DEFAULT_SUBCATEGORY, top, top),
-            )
 
 
 def seed_default_directories(conn: sqlite3.Connection) -> int:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 from .model_client import ModelClient, ModelError
@@ -8,9 +9,11 @@ from .prompts import SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt
 from .text import clean_text
 
 
-def synthesize_pending(conn: sqlite3.Connection, model_client: ModelClient | None = None) -> int:
+def synthesize_pending(
+    conn: sqlite3.Connection, model_client: ModelClient | None = None, limit: int = 5
+) -> int:
     # 只综述"待综述"的簇: 新建的(synthesis_status 为 NULL)或被加了新成员的(标 'stale')。
-    # 已 'ok' 且本轮没动过的跳过, 避免每轮重算全部簇。
+    # 已 'ok' 且本轮没动过的跳过。综述贵(双语×大模型), 每轮限量, 多源优先, 靠循环多轮啃完。
     cluster_ids = [
         int(row["id"])
         for row in conn.execute(
@@ -22,7 +25,10 @@ def synthesize_pending(conn: sqlite3.Connection, model_client: ModelClient | Non
                   SELECT 1 FROM articles a
                   WHERE a.cluster_id = c.id AND a.article_facts IS NOT NULL
               )
-            """
+            ORDER BY c.source_count DESC, c.id
+            LIMIT ?
+            """,
+            (limit,),
         )
     ]
     changed = 0
@@ -89,19 +95,17 @@ def synthesize_cluster(
             }
             for row in rows
         ]
+        valid_nos = {int(row["source_no"]) for row in rows}
         try:
-            zh = ensure_sources(
-                model_client.complete(
-                    SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt(title, fact_packages, sources, "zh")
-                ),
-                rows,
+            zh_body = model_client.complete(
+                SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt(title, fact_packages, sources, "zh")
             )
-            en = ensure_sources(
-                model_client.complete(
-                    SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt(title, fact_packages, sources, "en")
-                ),
-                rows,
+            en_body = model_client.complete(
+                SYNTHESIS_SYSTEM_PROMPT, synthesis_user_prompt(title, fact_packages, sources, "en")
             )
+            # 去掉指向不存在来源的引用编号(如 [7]), 再由程序追加权威 Sources。
+            zh = ensure_sources(strip_invalid_citations(zh_body, valid_nos), rows)
+            en = ensure_sources(strip_invalid_citations(en_body, valid_nos), rows)
             return zh, zh, en, model_client.model_name
         except ModelError:
             pass
@@ -123,6 +127,14 @@ def synthesize_cluster_heuristic(rows: list[sqlite3.Row], fact_packages: list[di
     for row in rows:
         parts.append(f"[{row['source_no']}] {row['source_name']} · {row['title']} · {row['url']}")
     return "\n".join(parts).strip() + "\n"
+
+
+_CITE = re.compile(r"\[(\d+)\]")
+
+
+def strip_invalid_citations(text: str, valid_nos: set[int]) -> str:
+    """删掉正文里指向不存在来源的引用编号(模型偶尔编 [7])。"""
+    return _CITE.sub(lambda m: m.group(0) if int(m.group(1)) in valid_nos else "", text)
 
 
 def ensure_sources(markdown: str, rows: list[sqlite3.Row]) -> str:

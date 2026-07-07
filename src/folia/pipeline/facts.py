@@ -83,16 +83,24 @@ def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None)
         "title": row["title"],
         "text": row["extracted_text"],
     }
-    try:
-        raw = model_client.complete(FACT_SYSTEM_PROMPT, fact_user_prompt(article))
-        facts = parse_json_object(raw)
+    base_prompt = fact_user_prompt(article)
+    # 小模型偶尔吐非法 JSON: 解析失败重试一次(带纠正提示), 仍失败退回规则抽取。
+    for attempt in range(2):
+        user = base_prompt if attempt == 0 else (
+            base_prompt + "\n\n上次输出不是合法 JSON。只输出符合 schema 的合法 JSON，不要任何多余文字。"
+        )
+        try:
+            facts = parse_json_object(model_client.complete(FACT_SYSTEM_PROMPT, user))
+        except ModelError:
+            break
+        except (ValueError, TypeError, json.JSONDecodeError):
+            continue
         facts["article_id"] = row["id"]
         facts["source_no"] = source_no
         facts["source_name"] = row["source_name"]
         facts["title"] = row["title"]
         return normalize_fact_package(facts)
-    except (ModelError, ValueError, TypeError, json.JSONDecodeError):
-        return extract_facts(row["extracted_text"], row["id"], source_no, row["source_name"], row["title"])
+    return extract_facts(row["extracted_text"], row["id"], source_no, row["source_name"], row["title"])
 
 
 def parse_json_object(value: str) -> dict:
@@ -125,6 +133,9 @@ def normalize_fact_package(value: dict) -> dict:
     }
 
 
+FACT_TYPES = {"event", "decision", "statement", "cause", "impact", "timeline"}
+
+
 def normalize_facts(value: object) -> list[dict]:
     if not isinstance(value, list):
         return []
@@ -132,10 +143,12 @@ def normalize_facts(value: object) -> list[dict]:
     for item in value:
         if isinstance(item, dict):
             text = clean_text(str(item.get("text", "")))
-            fact_type = clean_text(str(item.get("type", "core_fact"))) or "core_fact"
+            fact_type = clean_text(str(item.get("type", ""))).lower()
         else:
             text = clean_text(str(item))
-            fact_type = "core_fact"
+            fact_type = ""
+        if fact_type not in FACT_TYPES:  # 越界/缺失 → 归一为 event
+            fact_type = "event"
         if text:
             facts.append({"text": text, "type": fact_type})
     return facts

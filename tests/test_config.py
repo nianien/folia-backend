@@ -23,8 +23,9 @@ class ConfigDbTest(unittest.TestCase):
         self.assertIs(s["loop"]["enabled"], False)
         self.assertEqual(s["loop"]["interval"], 1800)
         self.assertEqual(s["models"]["embedding"], "bge-m3")
-        self.assertEqual(s["models"]["categorize"], {"provider": "ollama", "model": "gemma3:4b"})
-        self.assertEqual(s["models"]["synthesis"]["provider"], "")  # 空=规则
+        self.assertEqual(s["models"]["categorize"], {"provider": "ollama", "model": "qwen3.5:9b"})
+        self.assertEqual(s["models"]["synthesis"], {"provider": "ollama", "model": "qwen3.5:9b"})
+        self.assertEqual(s["models"]["facts"], {"provider": "ollama", "model": "qwen3.5:9b"})
         self.assertIn("openai", s["providers"])
         self.assertEqual(
             s["providers"]["openai"]["endpoint"], "https://api.openai.com/v1/chat/completions"

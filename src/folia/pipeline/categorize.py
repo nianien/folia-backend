@@ -7,45 +7,39 @@ articles.category 存拼接后的路径字符串, 单列唯一。
 """
 from __future__ import annotations
 
-from .config import DEFAULT_SUBCATEGORY
+from .config import FALLBACK_CATEGORY
 from .model_client import ModelClient, ModelError
+from .prompts import CATEGORIZE_SYSTEM_PROMPT, categorize_user_prompt
 
 # tree: [(一级, [二级...]), ...]
 Tree = list[tuple[str, list[str]]]
 
-SYSTEM_PROMPT = (
-    "你是新闻分类器。把用户给的新闻归入所给两级目录之一，"
-    "只回一行「一级/二级」，如「国际/中东」，不要解释、不要多余标点。"
-    "若归不到某个具体二级，就用该一级下的「综合」。"
-)
-
 
 def _fallback(tree: Tree) -> str:
     tops = [t for t, _ in tree if t]
-    top = DEFAULT_SUBCATEGORY if DEFAULT_SUBCATEGORY in tops else (tops[-1] if tops else DEFAULT_SUBCATEGORY)
-    return f"{top}/{DEFAULT_SUBCATEGORY}"
+    return FALLBACK_CATEGORY if FALLBACK_CATEGORY in tops else (tops[-1] if tops else FALLBACK_CATEGORY)
 
 
 def _match(out: str, tree: Tree) -> str:
     text = (out or "").strip()
     subs_by_top = {top: subs for top, subs in tree}
-    # 优先解析 "一级/二级"
+    # 解析 "一级/二级": 二级有效 → 路径; 二级无效 → 只留一级
     if "/" in text:
         top, _, sub = text.partition("/")
         top, sub = top.strip(), sub.strip()
         if top in subs_by_top:
-            return f"{top}/{sub}" if sub in subs_by_top[top] else f"{top}/{DEFAULT_SUBCATEGORY}"
-    # 容错1: 文本里命中某个一级(+可能的二级)
+            return f"{top}/{sub}" if sub in subs_by_top[top] else top
+    # 命中某个一级(+可能的二级)
     for top, subs in tree:
         if top and top in text:
             for sub in subs:
-                if sub and sub != DEFAULT_SUBCATEGORY and sub in text:
+                if sub and sub in text:
                     return f"{top}/{sub}"
-            return f"{top}/{DEFAULT_SUBCATEGORY}"
-    # 容错2: 只命中某个二级(未提一级)
+            return top
+    # 只命中某个二级(未提一级)
     for top, subs in tree:
         for sub in subs:
-            if sub and sub != DEFAULT_SUBCATEGORY and sub in text:
+            if sub and sub in text:
                 return f"{top}/{sub}"
     return _fallback(tree)
 
@@ -59,18 +53,9 @@ def classify(
     tops = [t for t, _ in tree if t]
     if not tops or client is None or not client.enabled:
         return _fallback(tree)
-    catalog = "\n".join(
-        f"- {top}: {'、'.join(s for s in subs if s) or '（暂无二级，用 综合）'}" for top, subs in tree
-    )
-    snippet = (text or "")[:300]
-    user_prompt = (
-        f"两级目录：\n{catalog}\n"
-        f"标题：{title or ''}\n"
-        f"摘要：{snippet}\n"
-        "分类（只回 一级/二级）："
-    )
+    user_prompt = categorize_user_prompt(title or "", (text or "")[:300], tree)
     try:
-        out = client.complete(SYSTEM_PROMPT, user_prompt)
+        out = client.complete(CATEGORIZE_SYSTEM_PROMPT, user_prompt)
     except ModelError:
         return _fallback(tree)
     return _match(out, tree)
