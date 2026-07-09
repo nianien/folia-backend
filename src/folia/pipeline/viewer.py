@@ -352,10 +352,37 @@ def render_cluster_detail(conn: sqlite3.Connection, cluster_id: int) -> str | No
         f'<h1>{escape(cluster["title"] or "未命名聚类")}</h1>'
         f"{meta}{lead}"
         f'<div class="article-body">{body_html}</div>'
+        f"{render_tags(cluster_tags(conn, cluster_id))}"
         f"{render_sources(conn, cluster_id)}"
         "</article>"
     )
     return shell(cluster["title"] or "聚类", inner)
+
+
+def cluster_tags(conn: sqlite3.Connection, cluster_id: int, limit: int = 12) -> list[str]:
+    """聚合该簇所有文章的 LLM 标签(逗号存), 去重保序, 限量。"""
+    seen: list[str] = []
+    for row in conn.execute(
+        "SELECT tags FROM articles WHERE cluster_id=? AND tags IS NOT NULL AND tags != ''",
+        (cluster_id,),
+    ):
+        for tag in str(row["tags"]).split(","):
+            tag = tag.strip()
+            if tag and tag not in seen:
+                seen.append(tag)
+    return seen[:limit]
+
+
+def render_tags(tags: list[str]) -> str:
+    if not tags:
+        return ""
+    chips = "".join(
+        '<span style="display:inline-block;padding:2px 11px;margin:0 6px 6px 0;'
+        'border:1px solid var(--cat,#ccc);border-radius:999px;font-size:13px;'
+        f'color:var(--cat,#555);opacity:.85">{escape(t)}</span>'
+        for t in tags
+    )
+    return f'<div style="margin:18px 0 4px">{chips}</div>'
 
 
 def render_article_detail(conn: sqlite3.Connection, article_id: str) -> str | None:

@@ -18,7 +18,7 @@ from .text import clean_text
 def analyze_pending(conn: sqlite3.Connection, model_client: ModelClient | None = None, limit: int = 5) -> int:
     if model_client is None or not model_client.enabled:
         return 0
-    tree, valid = _catalog(conn)
+    tree, valid, tops = _catalog(conn)
     if not tree:
         return 0
     rows = list(
@@ -40,7 +40,7 @@ def analyze_pending(conn: sqlite3.Connection, model_client: ModelClient | None =
         if result is None:
             continue  # 本轮没出来, 留到下轮
         category, tags, package = result
-        category = category if category in valid else FALLBACK_CATEGORY  # 代码兜底, 非目录内 → 综合
+        category = _resolve_category(category, valid, tops)  # 代码兜底
         conn.execute(
             "UPDATE articles SET category=?, tags=?, article_facts=?, fact_status='ok' WHERE id=?",
             (category, ",".join(tags), json.dumps(package, ensure_ascii=False), row["id"]),
@@ -50,16 +50,40 @@ def analyze_pending(conn: sqlite3.Connection, model_client: ModelClient | None =
     return done
 
 
-def _catalog(conn: sqlite3.Connection) -> tuple[list[tuple[str, list[str]]], set[str]]:
-    """返回 (分类树, 合法分类字符串集合)。合法集含"一级"与"一级/二级"整串,用于代码校验。"""
-    rows = conn.execute("SELECT name, parent FROM directory ORDER BY sort_order, name").fetchall()
-    tops = [r["name"] for r in rows if not r["parent"]]
-    tree = [(top, [r["name"] for r in rows if r["parent"] == top]) for top in tops]
-    valid = set(tops)
-    for top, subs in tree:
-        for sub in subs:
+def _catalog(conn: sqlite3.Connection):
+    """返回 (分类树, 合法整串集合, 一级名集合)。
+
+    树含描述, 供 prompt 展示给 LLM: [(一级名, 一级描述, [(二级名, 二级描述), ...]), ...]。
+    合法集含"一级"与"一级/二级"整串, 用于代码校验。
+    """
+    rows = conn.execute(
+        "SELECT name, parent, description FROM directory ORDER BY sort_order, name"
+    ).fetchall()
+    tops = [r for r in rows if not r["parent"]]
+    tree = [
+        (
+            t["name"],
+            t["description"] or "",
+            [(r["name"], r["description"] or "") for r in rows if r["parent"] == t["name"]],
+        )
+        for t in tops
+    ]
+    top_names = {t["name"] for t in tops}
+    valid = set(top_names)
+    for top, _desc, subs in tree:
+        for sub, _sdesc in subs:
             valid.add(f"{top}/{sub}")
-    return tree, valid
+    return tree, valid, top_names
+
+
+def _resolve_category(category: str, valid: set[str], tops: set[str]) -> str:
+    """校验 LLM 给的分类:整串命中就用;二级无效但一级有效 → 退到一级;都不行 → 综合。"""
+    if category in valid:
+        return category
+    top = category.split("/")[0].strip()
+    if top in tops:
+        return top
+    return FALLBACK_CATEGORY
 
 
 def _analyze_one(
