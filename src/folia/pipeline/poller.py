@@ -87,7 +87,7 @@ def _entry_to_article(entry: Any, feed: sqlite3.Row) -> FeedArticle | None:
         source_id=feed["url"],
         source_name=feed["name"] or "unknown",
         source_tier="",  # tier 已废弃; 重要性以后从内容算, 不挂在源上
-        category="",  # 留空; 由 categorize_pending 按内容(LLM)定目录
+        category="",  # 留空; 由 analyze 分析阶段按内容(LLM)定目录
         title=title,
         url=url,
         guid=guid,

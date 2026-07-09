@@ -3,11 +3,11 @@ from __future__ import annotations
 import argparse
 import sqlite3
 
+from .analyze import analyze_pending
 from .config import database_path
 from .db import fetch_rows
 from .dedupe import assign_pending_articles
 from .extractor import fetch_fulltext, html_to_text
-from .facts import facts_pending
 from .model_client import create_model_client
 from .poller import poll
 from .synthesizer import synthesize_pending
@@ -35,43 +35,28 @@ def main(argv: list[str] | None = None) -> int:
     return 1
 
 
-def run_once(conn: sqlite3.Connection, settings: dict) -> int:
-    """自检一轮: 抓取 → 抽取 → 分类 → 聚类 → 事实 → 成稿。每步只处理未完成项(幂等)。"""
-    print(f"inserted {poll(conn, settings)} articles")
-    print(f"extracted {extract_pending(conn, settings)} articles")
-    print(f"categorized {categorize_pending(conn, settings)} articles")
-    print(f"assigned {assign_pending_articles(conn, settings)} articles to clusters")
-    print(f"generated facts for {facts_pending(conn, create_model_client(settings, 'facts'))} articles")
-    print(f"synthesized {synthesize_pending(conn, create_model_client(settings, 'synthesis'))} clusters")
-    return 0
+def run_once(conn: sqlite3.Connection, settings: dict, on_stage=None) -> int:
+    """一轮: 爬取 → 解析 → 分类 → 聚合 → 提炼 → 合成。每步只处理未完成项(幂等, 限量)。
 
+    on_stage(名称) 在进入每个阶段前回调, 供面板显示当前阶段(爬取中/解析中/...)。
+    返回本轮"实际处理的项数"。>0 说明还有积压, 循环应尽快再跑一轮; =0 说明已消化完, 可歇到下个间隔。
+    """
+    def stage(name: str) -> None:
+        if on_stage is not None:
+            on_stage(name)
 
-def categorize_pending(conn: sqlite3.Connection, settings: dict, limit: int = 40) -> int:
-    """给还没分类的文章按内容定目录(LLM); 每轮限量, 积压分多轮消化。"""
-    from .categorize import classify
-
-    rows = conn.execute("SELECT name, parent FROM directory ORDER BY sort_order, name").fetchall()
-    tops = [r["name"] for r in rows if not r["parent"]]
-    if not tops:
-        return 0
-    tree = [(top, [r["name"] for r in rows if r["parent"] == top]) for top in tops]
-    client = create_model_client(settings, "categorize")
-    if not client.enabled:
-        return 0
-    rows = fetch_rows(
-        conn,
-        "SELECT id, title, extracted_text, summary FROM articles "
-        "WHERE category IS NULL OR category='' LIMIT ?",
-        (limit,),
-    )
-    changed = 0
-    for row in rows:
-        text = row["extracted_text"] or row["summary"] or ""
-        category = classify(row["title"], text, tree, client)
-        conn.execute("UPDATE articles SET category=? WHERE id=?", (category, row["id"]))
-        changed += 1
-    conn.commit()
-    return changed
+    stage("爬取中")
+    n_poll = poll(conn, settings)
+    stage("解析中")
+    n_extract = extract_pending(conn, settings)
+    stage("分析中")  # 分类 + 标签 + 提炼, 一次 LLM
+    n_analyze = analyze_pending(conn, create_model_client(settings, "analyze"))
+    stage("聚合中")  # 分析后聚: 用 summary 算 embedding, 同最细分类 + 24h 内
+    assign_pending_articles(conn, settings)
+    stage("合成中")
+    n_synth = synthesize_pending(conn, create_model_client(settings, "synthesis"))
+    print(f"poll={n_poll} extract={n_extract} analyze={n_analyze} synth={n_synth}")
+    return n_poll + n_extract + n_analyze + n_synth
 
 
 def extract_pending(conn: sqlite3.Connection, settings: dict) -> int:

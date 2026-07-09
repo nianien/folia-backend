@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,7 +34,11 @@ class ExportTest(unittest.TestCase):
                 summary="a summary",
             ),
         )
-        conn.execute("UPDATE articles SET extracted_text='body', extract_status='ok' WHERE id=?", (aid,))
+        conn.execute(
+            "UPDATE articles SET extracted_text='body', extract_status='ok', "
+            "article_facts=?, fact_status='ok' WHERE id=?",
+            (json.dumps({"summary": "a summary", "key_points": [], "source_no": 0}), aid),
+        )
         conn.commit()
         assign_pending_articles(conn, JACCARD)  # → 1 cluster + cluster_sources
 

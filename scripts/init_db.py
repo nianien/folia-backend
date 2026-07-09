@@ -66,9 +66,8 @@ def default_settings() -> dict:
         "providers": providers,
         "models": {
             "embedding": "bge-m3",
-            "categorize": {"provider": "ollama", "model": "qwen3.6:35b-a3b"},
+            "analyze": {"provider": "ollama", "model": "qwen3.6:35b-a3b"},
             "synthesis": {"provider": "ollama", "model": "qwen3.6:35b-a3b"},
-            "facts": {"provider": "ollama", "model": "qwen3.6:35b-a3b"},
         },
         "loop": {"enabled": False, "interval": 1800},
     }

@@ -26,7 +26,7 @@ from . import settings as cfg_store
 from .runner import PipelineRunner
 
 # 选 provider + 模型的功能(embedding 单列, 固定本地 Ollama)
-CHAT_FUNCTIONS = ["categorize", "synthesis", "facts"]
+CHAT_FUNCTIONS = ["analyze", "synthesis"]
 
 BASE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
@@ -200,18 +200,15 @@ def create_app(db_path: Path) -> FastAPI:
     @app.post("/admin/models")
     def set_models(
         embedding: str = Form(""),
-        categorize_provider: str = Form(""),
-        categorize_model: str = Form(""),
+        analyze_provider: str = Form(""),
+        analyze_model: str = Form(""),
         synthesis_provider: str = Form(""),
         synthesis_model: str = Form(""),
-        facts_provider: str = Form(""),
-        facts_model: str = Form(""),
     ):
         values = {"models.embedding": embedding.strip()}
         for fn, provider, model in (
-            ("categorize", categorize_provider, categorize_model),
+            ("analyze", analyze_provider, analyze_model),
             ("synthesis", synthesis_provider, synthesis_model),
-            ("facts", facts_provider, facts_model),
         ):
             values[f"models.{fn}.provider"] = provider.strip()
             values[f"models.{fn}.model"] = model.strip()

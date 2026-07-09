@@ -16,8 +16,7 @@
   <div class="card">
     <h3>抓取</h3>
     <div class="kv"><span class="k">状态</span>
-      {% if status.busy %}<span class="pill on"><span class="dot"></span>自检中</span>
-      {% else %}<span class="pill on"><span class="dot"></span>循环运行中（每轮自检，处理未完成项）</span>{% endif %}</div>
+      <span class="pill on"><span class="dot"></span>{{ status.phase }}</span></div>
     <div class="kv"><span class="k">上次</span><span class="muted">{{ status.last_message }}{% if status.last_run %} · {{ status.last_run }}{% endif %}</span></div>
     <div class="row" style="margin-top:14px">
       <form method="post" action="/admin/loop/run"><button>立即跑一轮</button></form>
@@ -146,8 +145,8 @@
       <datalist id="embed-models">{% for m in embed_models %}<option value="{{ m }}">{% endfor %}</datalist>
       <div style="height:16px"></div>
 
-      {% set labels = {'categorize':'新闻分类','synthesis':'综述生成','facts':'事实抽取'} %}
-      {% set hints = {'categorize':'把新闻归到某个目录','synthesis':'把一簇多源写成一条摘要','facts':'从单篇抽关键事实'} %}
+      {% set labels = {'analyze':'分析（分类+标签+提炼）','synthesis':'综述生成'} %}
+      {% set hints = {'analyze':'读单篇 → 分类、打标签、提炼核心内容与关键信息','synthesis':'把一簇多源写成一条要闻'} %}
       {% for fn in chat_functions %}
       {% set cur = models[fn] %}
       {% set opts = provider_models.get(cur.provider, []) %}

@@ -73,7 +73,7 @@ class ConfigDbTest(unittest.TestCase):
             conn = connect(Path(os.environ["FOLIA_DB_PATH"]))
             s = load_settings(conn)
             self.assertEqual(len(store.list_feeds(conn)), len(install.DEFAULT_FEEDS))
-            self.assertEqual(s["models"]["categorize"]["provider"], "ollama")
+            self.assertEqual(s["models"]["analyze"]["provider"], "ollama")
             self.assertEqual(s["loop"]["enabled"], "0")  # bool → '0'
             conn.close()
             self.assertEqual(install.main(), 0)  # 再跑一次: INSERT OR IGNORE, 不重复

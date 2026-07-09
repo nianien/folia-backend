@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -36,8 +37,12 @@ class TwoPhaseAccretionTest(unittest.TestCase):
             ),
         )
         self.assertIsNotNone(aid)
+        # 聚类现在只认"已分析"的文章(有 article_facts), 且用其 summary 做比较文本
+        facts = json.dumps({"summary": text, "key_points": [], "source_no": 0})
         conn.execute(
-            "UPDATE articles SET extracted_text=?, extract_status='ok' WHERE id=?", (text, aid)
+            "UPDATE articles SET extracted_text=?, extract_status='ok', "
+            "article_facts=?, fact_status='ok' WHERE id=?",
+            (text, facts, aid),
         )
         conn.commit()
 

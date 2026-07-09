@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS articles (
   source_name TEXT NOT NULL,
   source_tier TEXT,
   category TEXT,
+  tags TEXT,
   external_id TEXT,
   guid TEXT,
   url TEXT NOT NULL,
@@ -124,6 +125,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col in ("synthesis_zh", "synthesis_en"):
         if col not in cluster_cols:
             conn.execute(f"ALTER TABLE clusters ADD COLUMN {col} TEXT")
+
+    article_cols = {r[1] for r in conn.execute("PRAGMA table_info(articles)")}
+    if "tags" not in article_cols:
+        conn.execute("ALTER TABLE articles ADD COLUMN tags TEXT")
 
     # directory 旧结构是扁平(主键 name, 无 parent) → 重建为两级, 旧行迁成一级
     dir_cols = {r[1] for r in conn.execute("PRAGMA table_info(directory)")}

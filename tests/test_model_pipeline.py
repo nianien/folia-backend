@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
-from folia.pipeline.db import connect, init_db, insert_article
+from folia.pipeline.analyze import analyze_pending
+from folia.pipeline.db import connect, init_db, insert_article, insert_directory
 from folia.pipeline.dedupe import assign_pending_articles
-from folia.pipeline.facts import facts_pending
 from folia.pipeline.models import FeedArticle
 from folia.pipeline.synthesizer import synthesize_pending
 
@@ -20,29 +19,22 @@ class FakeModelClient:
     model_name = "fake:test"
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
-        if "JSON" in system_prompt or "json" in user_prompt.lower():
-            return """
-            {
-              "facts": [{"text": "The city council approved the transit plan.", "type": "core_fact"}],
-              "numbers": ["The projected cost is 2 billion dollars."],
-              "quotes": [],
-              "background": [],
-              "uncertainties": []
-            }
-            """
-        return """# City council approves transit plan
-
-## 核心事实
-
-The city council approved the transit plan. [1][2]
-"""
+        if system_prompt.startswith("你是新闻分析器"):
+            return ('{"category": "科技", "tags": ["交通", "议会"], '
+                    '"summary": "The city council approved the transit plan, projected to cost 2 billion dollars.", '
+                    '"key_points": ["2 billion dollars"]}')
+        return ("# City council approves transit plan\n\n"
+                "The city council approved the transit plan. [1][2]\n")
 
 
 class ModelPipelineTest(unittest.TestCase):
-    def test_model_client_can_drive_facts_and_synthesis(self) -> None:
+    def test_model_client_drives_analyze_and_synthesis(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             conn = connect(Path(tmp) / "frontpage.sqlite")
             init_db(conn)
+            insert_directory(conn, "科技", "", "科技", "#000", 1)
+            insert_directory(conn, "综合", "", "综合", "#111", 99)
+            conn.commit()
             articles = [
                 FeedArticle("sample", "Sample", "wire", "Transit plan approved", "https://example.com/a", "a", None, "City council approved the transit plan."),
                 FeedArticle("sample", "Sample", "wire", "City council approves transit plan", "https://example.com/b", "b", None, "The transit plan has a projected cost of 2 billion dollars."),
@@ -51,10 +43,10 @@ class ModelPipelineTest(unittest.TestCase):
                 insert_article(conn, article)
             conn.execute("UPDATE articles SET extracted_text=summary, extract_status='fallback_summary'")
             conn.commit()
-            assign_pending_articles(conn, JACCARD_SETTINGS)
 
             client = FakeModelClient()
-            self.assertEqual(facts_pending(conn, client), 2)
+            self.assertEqual(analyze_pending(conn, client, limit=10), 2)
+            assign_pending_articles(conn, JACCARD_SETTINGS)
             self.assertEqual(synthesize_pending(conn, client), 1)
             row = conn.execute("SELECT synthesized_text, synthesis_model FROM clusters LIMIT 1").fetchone()
             self.assertIn("[1]", row["synthesized_text"])

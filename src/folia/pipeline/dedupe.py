@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import datetime
 from typing import Any
 
+from .config import FALLBACK_CATEGORY
+from .text import clean_text
 from .embeddings import (
     EmbeddingConfig,
     EmbeddingsUnavailable,
@@ -35,12 +39,14 @@ def assign_pending_articles(conn: sqlite3.Connection, settings: dict[str, Any]) 
     else:
         threshold = float(dedupe_cfg.get("jaccard_threshold", 0.42))
 
+    lookback_hours = float(dedupe_cfg.get("lookback_hours", 24))
+    # 只聚"已分析"的文章(有 article_facts → 有 summary/category); 未分析的等分析完再聚。
     pending = list(
         conn.execute(
             """
-            SELECT id, title, summary, extracted_text
+            SELECT id, title, category, published_at, fetched_at, article_facts
             FROM articles
-            WHERE cluster_id IS NULL
+            WHERE cluster_id IS NULL AND article_facts IS NOT NULL
             ORDER BY published_at DESC, fetched_at DESC
             """
         )
@@ -56,7 +62,9 @@ def assign_pending_articles(conn: sqlite3.Connection, settings: dict[str, Any]) 
     unattached: list[tuple[sqlite3.Row, list[float] | None]] = []
     for article in pending:
         vector = _safe_embed(comparison_text(article), emb_cfg) if use_embeddings else None
-        cluster_id, _ = best_cluster(conn, article, vector, existing_ids, use_embeddings, threshold)
+        cluster_id, _ = best_cluster(
+            conn, article, vector, existing_ids, use_embeddings, threshold, lookback_hours
+        )
         if cluster_id is not None:
             join_cluster(conn, cluster_id, article, vector, use_embeddings)
         else:
@@ -65,7 +73,9 @@ def assign_pending_articles(conn: sqlite3.Connection, settings: dict[str, Any]) 
     # Phase 2: cluster the leftovers among themselves into new clusters.
     new_ids: set[int] = set()
     for article, vector in unattached:
-        cluster_id, _ = best_cluster(conn, article, vector, new_ids, use_embeddings, threshold)
+        cluster_id, _ = best_cluster(
+            conn, article, vector, new_ids, use_embeddings, threshold, lookback_hours
+        )
         if cluster_id is None:
             new_ids.add(create_cluster(conn, article, vector))
         else:
@@ -82,40 +92,62 @@ def best_cluster(
     candidate_ids: set[int],
     use_embeddings: bool,
     threshold: float,
+    lookback_hours: float,
 ) -> tuple[int | None, float]:
+    """候选簇只在:同一最细分类(整串相等) + 代表文章 published_at 在 ±lookback_hours 内。
+
+    分类整串相等 = 有二级只跟同二级聚, 只到一级只跟同一级聚(不与已到二级的混)。
+    """
     if not candidate_ids:
         return None, 0.0
+    art_category = article["category"] or FALLBACK_CATEGORY
+    art_dt = _event_dt(article)
+    article_text = None if (use_embeddings and vector is not None) else comparison_text(article)
     best_id: int | None = None
     best_score = 0.0
-    if use_embeddings and vector is not None:
-        for row in conn.execute("SELECT id, centroid FROM clusters WHERE status='active'"):
-            if int(row["id"]) not in candidate_ids:
-                continue
+    for row in conn.execute(
+        """
+        SELECT c.id AS id, c.centroid AS centroid,
+               a.category AS category, a.published_at AS published_at, a.fetched_at AS fetched_at,
+               a.title AS title, a.article_facts AS article_facts
+        FROM clusters c
+        JOIN articles a ON a.id = c.representative_article_id
+        WHERE c.status='active'
+        """
+    ):
+        cid = int(row["id"])
+        if cid not in candidate_ids:
+            continue
+        if (row["category"] or FALLBACK_CATEGORY) != art_category:  # 同最细分类才聚
+            continue
+        cl_dt = _event_dt(row)
+        if art_dt and cl_dt and abs((art_dt - cl_dt).total_seconds()) > lookback_hours * 3600:
+            continue  # 超出时间窗
+        if use_embeddings and vector is not None:
             centroid = unpack_centroid(row["centroid"])
             if centroid is None:
                 continue
             score = cosine(vector, centroid)
-            if score > best_score:
-                best_id, best_score = int(row["id"]), score
-    else:
-        article_text = comparison_text(article)
-        for row in conn.execute(
-            """
-            SELECT c.id AS id, a.title AS title, a.summary AS summary,
-                   a.extracted_text AS extracted_text
-            FROM clusters c
-            JOIN articles a ON a.id = c.representative_article_id
-            WHERE c.status='active'
-            """
-        ):
-            if int(row["id"]) not in candidate_ids:
-                continue
+        else:
             score = jaccard(article_text, comparison_text(row))
-            if score > best_score:
-                best_id, best_score = int(row["id"]), score
+        if score > best_score:
+            best_id, best_score = cid, score
     if best_id is not None and best_score >= threshold:
         return best_id, best_score
     return None, best_score
+
+
+def _event_dt(row: sqlite3.Row) -> datetime | None:
+    """取文章时间用于时间窗比较:优先 published_at, 退 fetched_at;解析失败返回 None。"""
+    for key in ("published_at", "fetched_at"):
+        value = row[key] if key in row.keys() else None
+        if value:
+            try:
+                # 去掉时区: published_at 带 +00:00、fetched_at 无时区, 统一按 naive 比差值(都近似 UTC)
+                return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                continue
+    return None
 
 
 def create_cluster(conn: sqlite3.Connection, article: sqlite3.Row, vector: list[float] | None) -> int:
@@ -165,8 +197,15 @@ def _update_cluster_centroid(conn: sqlite3.Connection, cluster_id: int, vector: 
 
 
 def comparison_text(row: sqlite3.Row) -> str:
-    prefix = (row["extracted_text"] or "")[:500]
-    return " ".join([row["title"] or "", row["summary"] or "", prefix])
+    """聚类用的比较文本 = 标题 + 分析出的 summary(核心内容), 语义更聚焦。"""
+    summary = ""
+    facts = row["article_facts"] if "article_facts" in row.keys() else None
+    if facts:
+        try:
+            summary = clean_text(str(json.loads(facts).get("summary", "")))
+        except (ValueError, TypeError):
+            summary = ""
+    return " ".join([row["title"] or "", summary]).strip()
 
 
 def refresh_cluster(conn: sqlite3.Connection, cluster_id: int) -> None:

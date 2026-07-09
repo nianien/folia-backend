@@ -49,8 +49,8 @@ def synthesize_pending(
             """,
             (text, zh, en, model_name, cluster_id),
         )
+        conn.commit()  # 逐簇落库: 成一篇立刻显示一篇
         changed += 1
-    conn.commit()
     return changed
 
 
