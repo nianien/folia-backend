@@ -9,6 +9,8 @@ from __future__ import annotations
 import base64
 import os
 import secrets
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -18,7 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import viewer as viewer_mod
-from ..config import EMBED_MODELS, PROVIDER_MODELS, PROVIDERS, is_pg_dsn, load_settings
+from ..config import ROOT, EMBED_MODELS, PROVIDER_MODELS, PROVIDERS, is_pg_dsn, load_settings
 from ..db import connect
 from . import settings as cfg_store
 from .runner import PipelineRunner
@@ -101,34 +103,22 @@ def create_app(db_path: Path) -> FastAPI:
             "admin.html",
             {
                 "nav": "admin", "msg": msg, "tab": tab, "status": runner.status,
-                "enabled": s["loop"]["enabled"], "interval": s["loop"]["interval"],
-                "database_url": s["database"]["url"], "feeds": feeds,
+                "interval": s.get("loop", {}).get("interval", 1800),
+                "database_url": s.get("database", {}).get("url", ""), "feeds": feeds,
                 "directories": directories,
-                "chat_functions": CHAT_FUNCTIONS, "models": s["models"],
-                "embedding_model": s["models"]["embedding"],
+                "chat_functions": CHAT_FUNCTIONS, "models": s.get("models", {}),
+                "embedding_model": s.get("models", {}).get("embedding", ""),
                 "provider_options": [(name, label) for name, label, _e, _k in PROVIDERS],
                 "provider_models": PROVIDER_MODELS,
                 "embed_models": EMBED_MODELS,
             },
         )
 
-    # 抓取: 启停循环 / 立即跑 / 间隔
-    @app.post("/admin/loop/start")
-    def loop_start():
-        conn = db(); cfg_store.set_many(conn, {"loop.enabled": "1"}); conn.close()
-        runner.notify()
-        return _back("已启动循环 ✓")
-
-    @app.post("/admin/loop/stop")
-    def loop_stop():
-        conn = db(); cfg_store.set_many(conn, {"loop.enabled": "0"}); conn.close()
-        runner.notify()
-        return _back("已停止循环")
-
+    # 抓取: 循环常开自检; 这里只有「立即跑一轮」和改间隔
     @app.post("/admin/loop/run")
     def loop_run():
         runner.trigger_now()
-        return _back("已触发立即抓取")
+        return _back("已触发立即跑一轮")
 
     @app.post("/admin/interval")
     def set_interval(loop_interval: str = Form("1800")):
@@ -165,12 +155,18 @@ def create_app(db_path: Path) -> FastAPI:
         conn.close()
         return _back("已删除数据源", "sources")
 
-    @app.post("/admin/sources/import-seed")
-    def sources_import():
-        conn = db()
-        added = cfg_store.import_default_feeds(conn)
-        conn.close()
-        return _back(f"导入默认订阅 +{added}", "sources")
+    # 一键初始化: 以子进程跑 scripts/init_db.py(不 import 它), 幂等补齐默认 feeds/分类/配置
+    @app.post("/admin/install")
+    def run_install():
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "init_db.py")],
+            capture_output=True, text=True, cwd=str(ROOT),
+        )
+        runner.notify()
+        if proc.returncode == 0:
+            summary = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else "完成"
+            return _back(f"初始化完成 ✓ {summary}", "sources")
+        return _back(f"初始化失败: {(proc.stderr or proc.stdout)[:160]}", "sources")
 
     # 新闻分类: 两级增删(一级 parent=''; 二级 parent=所属一级)。加一级自动带默认二级 "综合"
     @app.post("/admin/directory/add")

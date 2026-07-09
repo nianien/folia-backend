@@ -1,9 +1,10 @@
-"""配置全部存 SQLite(settings / feed 表), 由面板编辑。
+"""运行期只读配置:全部从 SQLite 的 `settings` 表读,不含任何内置默认。
 
 - 只有 db 路径是引导项(env FOLIA_DB_PATH 或默认), 因为读 db 前得先知道 db 在哪。
-- 其余运行期配置: 内置默认(_defaults) + db `settings` 表的点分键覆盖 → 还原成既有的嵌套 dict,
-  消费者(poller / embeddings / dedupe / model_client)照旧读 dict, 不用改读法。
-- URL 类默认读环境变量(容器用 compose env: host.docker.internal; 宿主用 localhost)。
+- 初始数据(feeds / directories / settings)由一次性的 `scripts/init_db.py` 写入;本模块不引用它,
+  运行期也没有任何"默认兜底"——库里有什么就读什么, 消费者各自带内联默认应对缺键。
+- `settings` 表存点分键(如 dedupe.jaccard_threshold), load_settings 还原成嵌套 dict;
+  值是字符串(SQLite TEXT), 消费者读时自行 int()/float()/truthy() 转型。
 """
 from __future__ import annotations
 
@@ -14,26 +15,6 @@ from typing import Any
 
 # repo root: src/folia/pipeline/config.py → 上 3 层
 ROOT = Path(__file__).resolve().parents[3]
-
-# 默认订阅源: (feed_url, 名称, 一句话描述)。feed 表为空时播种(db.seed_default_feeds)。
-# 原始 RSS/Atom 地址(自写轮询器直接抓, 全文交给 trafilatura)。分类由内容决定, 不挂在源上。
-DEFAULT_FEEDS: list[tuple[str, str, str]] = [
-    ("http://rsshub:1200/apnews/topics/apf-topnews", "AP News", "美联社,国际通讯社头条快讯"),
-    ("https://www.aljazeera.com/xml/rss/all.xml", "Al Jazeera", "半岛电视台,国际新闻"),
-    ("https://www.theguardian.com/world/rss", "Guardian World", "《卫报》国际版"),
-    ("https://feeds.bbci.co.uk/news/world/rss.xml", "BBC World", "BBC 世界新闻"),
-    ("https://hnrss.org/frontpage", "Hacker News", "科技创业社区热门讨论"),
-    ("http://rsshub:1200/latepost", "LatePost", "晚点 LatePost,中文科技与商业报道"),
-]
-
-# 默认新闻分类: (名称, 父级, 描述, 颜色, 排序)。父级 "" = 一级; 否则 = 所属一级名。
-# 只播一级; 二级由用户在「新闻分类」页按需加。分类结果可停在一级(归不到二级时)或到二级。
-DEFAULT_DIRECTORIES: list[tuple[str, str, str, str, int]] = [
-    ("国际", "", "国际 / 世界新闻", "#0f9d76", 1),
-    ("科技", "", "科技 / 互联网 / AI", "#1f8fb3", 2),
-    ("中国", "", "中国相关", "#2a9d8f", 3),
-    ("综合", "", "综合 / 未归类", "#6d7c75", 99),
-]
 
 FALLBACK_CATEGORY = "综合"  # 彻底归不了时落这个一级
 
@@ -67,82 +48,32 @@ PROVIDER_MODELS: dict[str, list[str]] = {
 EMBED_MODELS: list[str] = ["bge-m3", "nomic-embed-text", "mxbai-embed-large"]
 
 
-def _defaults() -> dict[str, Any]:
-    return {
-        "database": {"url": os.environ.get("DATABASE_URL", "")},  # 入库目标(Neon); 空=不入库
-        "poller": {
-            "timeout_seconds": 20,  # 每个源抓取超时
-        },
-        "embeddings": {
-            "url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),
-            "timeout_seconds": 30,
-        },
-        "dedupe": {
-            "same_event_threshold": 0.85,
-            "jaccard_threshold": 0.42,
-            "lookback_hours": 48,
-        },
-        "model": {  # LLM 通用参数(所有 provider 共用)
-            "timeout_seconds": 120,
-            "temperature": 0.2,
-            "max_output_tokens": 3000,
-            "num_ctx": 8192,  # 仅本地 Ollama 生效; 不设则默认开 32K, 大模型在小内存机上会溢出到 swap
-        },
-        # 各供应商的 endpoint 与 API key; key 默认取历史环境变量, 配置页可覆盖并落库。
-        "providers": {
-            name: {
-                "endpoint": endpoint,
-                "api_key": os.environ.get(key_env, "") if key_env else "",
-            }
-            for name, _label, endpoint, key_env in PROVIDERS
-        },
-        # 各功能选 provider + 模型。默认全走本地 Ollama(这是个 AI 项目, 最低也用本地模型)。
-        "models": {
-            "embedding": "bge-m3",
-            "categorize": {"provider": "ollama", "model": "qwen3.5:9b"},
-            "synthesis": {"provider": "ollama", "model": "qwen3.5:9b"},
-            "facts": {"provider": "ollama", "model": "qwen3.5:9b"},
-        },
-        "loop": {"enabled": False, "interval": 1800},
-    }
-
-
 def load_settings(conn: sqlite3.Connection) -> dict[str, Any]:
-    settings = _defaults()
+    """只读 settings 表, 把点分键还原成嵌套 dict。叶子为字符串, 消费者自行转型。
+
+    库里没有的键就不存在(无兜底默认); 消费者用 .get(key, 内联默认) 应对。
+    """
+    settings: dict[str, Any] = {}
     for row in conn.execute("SELECT key, value FROM settings"):
-        _apply_dotted(settings, str(row[0]), row[1])
+        _apply_dotted(settings, str(row[0]), "" if row[1] is None else str(row[1]))
     return settings
 
 
-def _apply_dotted(tree: dict[str, Any], dotted: str, value: Any) -> None:
+def _apply_dotted(tree: dict[str, Any], dotted: str, value: str) -> None:
     parts = dotted.split(".")
     node = tree
     for part in parts[:-1]:
         child = node.get(part)
         if not isinstance(child, dict):
-            return  # 未知路径, 忽略
+            child = {}
+            node[part] = child
         node = child
-    leaf = parts[-1]
-    node[leaf] = _coerce(node.get(leaf), value)
+    node[parts[-1]] = value
 
 
-def _coerce(default: Any, value: Any) -> Any:
-    if value is None:
-        return default
-    text = str(value)
-    if isinstance(default, bool):
-        return text.strip().lower() in ("1", "true", "yes", "on")
-    if isinstance(default, int):
-        try:
-            return int(text)
-        except ValueError:
-            return default
-    if isinstance(default, float):
-        try:
-            return float(text)
-        except ValueError:
-            return default
-    return text
+def truthy(value: Any) -> bool:
+    """把 settings 里的字符串布尔值('1'/'true'/…)转成 bool。"""
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
 def is_pg_dsn(dsn: str) -> bool:

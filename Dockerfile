@@ -18,5 +18,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8000
-# 面板(含循环)在应用内; 启停/间隔/配置/数据源都在面板里操作
-CMD ["python", "-m", "folia.pipeline.cli", "panel", "--host", "0.0.0.0", "--port", "8000"]
+# 只起面板(含循环)。DB 初始化不在这里做: 首次部署手动跑 `python scripts/init_db.py`
+# (或面板「一键初始化」按钮), 写的是 bind-mount 的宿主 ./data。
+CMD ["python", "-m", "folia.pipeline.cli", "start", "--host", "0.0.0.0", "--port", "8000"]

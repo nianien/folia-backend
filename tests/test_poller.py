@@ -56,13 +56,13 @@ class PollerTest(unittest.TestCase):
         status = conn.execute("SELECT last_status FROM feed WHERE url=?", (str(FIXTURE),)).fetchone()[0]
         self.assertIn("ok", status)
 
-    def test_poll_seeds_defaults_when_empty(self) -> None:
-        # 空 feed 表 → seed_default_feeds 播种(不实际联网抓, 只验证播种)
-        from folia.pipeline.db import seed_default_feeds
+    def test_poll_empty_feed_table_is_noop(self) -> None:
+        # 不再自动播种: 空 feed 表 → 轮询啥都不做, 返回 0(源由 scripts/init_db.py / 面板提供)
+        from folia.pipeline import poller
 
         conn = self._db()
-        self.assertEqual(seed_default_feeds(conn), 6)
-        self.assertEqual(conn.execute("SELECT COUNT(*) FROM feed").fetchone()[0], 6)
+        self.assertEqual(poller.poll(conn, {}), 0)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM feed").fetchone()[0], 0)
 
 
 if __name__ == "__main__":

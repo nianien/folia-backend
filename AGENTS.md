@@ -14,11 +14,8 @@ Dependencies are managed with [uv](https://astral.sh/uv) (`uv.lock` pins version
 
 ```bash
 uv sync                          # create .venv, install from uv.lock + the package
-# offline editorial layer against a local feed fixture:
-uv run folia-pipeline init-db
-uv run folia-pipeline ingest-fixture tests/fixtures/sample_feed.xml
-# full run (needs RSSHub up for rsshub-backed feeds; see README):
-uv run folia-pipeline run-once
+uv run python scripts/init_db.py # 一次性初始化 DB(建表 + 默认数据, 幂等)
+uv run folia-pipeline start --port 8000   # 起面板 + 自检循环(唯一命令; 其余都在面板里操作)
 ```
 
 `uv run <cmd>` runs inside the project venv.

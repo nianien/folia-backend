@@ -1,55 +1,20 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 
 from .model_client import ModelClient, ModelError
 from .prompts import FACT_SYSTEM_PROMPT, fact_user_prompt
 from .text import clean_text
 
-SENTENCE_RE = re.compile(r"(?<=[.!?。！？])\s+")
-NUMBER_RE = re.compile(r"\b\d[\d,]*(?:\.\d+)?%?\b")
-
-
-def extract_facts(text: str, article_id: str, source_no: int, source_name: str, title: str) -> dict:
-    sentences = [clean_text(sentence) for sentence in SENTENCE_RE.split(text) if clean_text(sentence)]
-    facts = [{"text": sentence, "type": "core_fact"} for sentence in score_sentences(sentences)[:8]]
-    numbers = []
-    for sentence in sentences:
-        if NUMBER_RE.search(sentence):
-            numbers.append(sentence)
-        if len(numbers) >= 5:
-            break
-    return {
-        "article_id": article_id,
-        "source_no": source_no,
-        "source_name": source_name,
-        "title": title,
-        "facts": facts,
-        "numbers": numbers,
-        "quotes": [],
-        "background": [],
-        "uncertainties": [],
-    }
-
-
-def score_sentences(sentences: list[str]) -> list[str]:
-    scored: list[tuple[int, int, str]] = []
-    for index, sentence in enumerate(sentences):
-        score = 0
-        if NUMBER_RE.search(sentence):
-            score += 3
-        if any(word in sentence.lower() for word in ["said", "announced", "reported", "according", "will"]):
-            score += 2
-        if 60 <= len(sentence) <= 260:
-            score += 1
-        scored.append((score, -index, sentence))
-    scored.sort(reverse=True)
-    return [sentence for _, _, sentence in scored]
-
 
 def facts_pending(conn: sqlite3.Connection, model_client: ModelClient | None = None) -> int:
+    """抽取待处理文章的事实包(纯 LLM)。
+
+    无模型(未配置/本地也没起)或本轮抽取失败的条目,留到下轮再试,不产出规则兜底。
+    """
+    if model_client is None or not model_client.enabled:
+        return 0
     rows = list(
         conn.execute(
             """
@@ -61,21 +26,23 @@ def facts_pending(conn: sqlite3.Connection, model_client: ModelClient | None = N
             """
         )
     )
+    done = 0
     for row in rows:
         facts = extract_facts_with_model(row, model_client)
+        if facts is None:
+            continue  # 本轮没抽出来, 留到下轮
         conn.execute(
             "UPDATE articles SET article_facts=?, fact_status='ok' WHERE id=?",
             (json.dumps(facts, ensure_ascii=False), row["id"]),
         )
+        done += 1
     conn.commit()
-    return len(rows)
+    return done
 
 
-def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None) -> dict:
+def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient) -> dict | None:
+    """调模型抽事实包;非法 JSON 重试一次,仍失败或调用出错 → 返回 None(本轮不出)。"""
     source_no = row["source_no"] or 0
-    if model_client is None or not model_client.enabled:
-        return extract_facts(row["extracted_text"], row["id"], source_no, row["source_name"], row["title"])
-
     article = {
         "article_id": row["id"],
         "source_no": source_no,
@@ -84,7 +51,6 @@ def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None)
         "text": row["extracted_text"],
     }
     base_prompt = fact_user_prompt(article)
-    # 小模型偶尔吐非法 JSON: 解析失败重试一次(带纠正提示), 仍失败退回规则抽取。
     for attempt in range(2):
         user = base_prompt if attempt == 0 else (
             base_prompt + "\n\n上次输出不是合法 JSON。只输出符合 schema 的合法 JSON，不要任何多余文字。"
@@ -92,7 +58,7 @@ def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None)
         try:
             facts = parse_json_object(model_client.complete(FACT_SYSTEM_PROMPT, user))
         except ModelError:
-            break
+            return None
         except (ValueError, TypeError, json.JSONDecodeError):
             continue
         facts["article_id"] = row["id"]
@@ -100,7 +66,7 @@ def extract_facts_with_model(row: sqlite3.Row, model_client: ModelClient | None)
         facts["source_name"] = row["source_name"]
         facts["title"] = row["title"]
         return normalize_fact_package(facts)
-    return extract_facts(row["extracted_text"], row["id"], source_no, row["source_name"], row["title"])
+    return None
 
 
 def parse_json_object(value: str) -> dict:
@@ -120,55 +86,18 @@ def parse_json_object(value: str) -> dict:
 
 
 def normalize_fact_package(value: dict) -> dict:
+    """归一为精简事实包:元数据 + 核心内容(summary) + 关键信息(key_points)。"""
     return {
         "article_id": str(value.get("article_id", "")),
         "source_no": int(value.get("source_no", 0)),
         "source_name": str(value.get("source_name", "")),
         "title": str(value.get("title", "")),
-        "facts": normalize_facts(value.get("facts", [])),
-        "numbers": normalize_strings(value.get("numbers", [])),
-        "quotes": normalize_quotes(value.get("quotes", [])),
-        "background": normalize_strings(value.get("background", [])),
-        "uncertainties": normalize_strings(value.get("uncertainties", [])),
+        "summary": clean_text(str(value.get("summary", ""))),
+        "key_points": normalize_strings(value.get("key_points", [])),
     }
-
-
-FACT_TYPES = {"event", "decision", "statement", "cause", "impact", "timeline"}
-
-
-def normalize_facts(value: object) -> list[dict]:
-    if not isinstance(value, list):
-        return []
-    facts = []
-    for item in value:
-        if isinstance(item, dict):
-            text = clean_text(str(item.get("text", "")))
-            fact_type = clean_text(str(item.get("type", ""))).lower()
-        else:
-            text = clean_text(str(item))
-            fact_type = ""
-        if fact_type not in FACT_TYPES:  # 越界/缺失 → 归一为 event
-            fact_type = "event"
-        if text:
-            facts.append({"text": text, "type": fact_type})
-    return facts
 
 
 def normalize_strings(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [text for item in value if (text := clean_text(str(item)))]
-
-
-def normalize_quotes(value: object) -> list[dict]:
-    if not isinstance(value, list):
-        return []
-    quotes = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        speaker = clean_text(str(item.get("speaker", "")))
-        text = clean_text(str(item.get("text", "")))
-        if text:
-            quotes.append({"speaker": speaker, "text": text})
-    return quotes

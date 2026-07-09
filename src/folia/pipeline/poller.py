@@ -15,7 +15,7 @@ from typing import Any
 
 import feedparser
 
-from .db import insert_article, seed_default_feeds, upsert_source
+from .db import insert_article, upsert_source
 from .models import FeedArticle
 from .text import clean_text
 
@@ -24,8 +24,7 @@ TIMEOUT_SECONDS = 20
 
 
 def poll(conn: sqlite3.Connection, settings: dict[str, Any]) -> int:
-    """抓取所有 enabled 的源, 返回本轮新入库文章数。"""
-    seed_default_feeds(conn)  # 首启空表 → 播种默认订阅
+    """抓取所有 enabled 的源, 返回本轮新入库文章数。源由 scripts/init_db.py 播种 / 面板增删。"""
     timeout = int(settings.get("poller", {}).get("timeout_seconds", TIMEOUT_SECONDS))
     prev_timeout = socket.getdefaulttimeout()
     socket.setdefaulttimeout(timeout)

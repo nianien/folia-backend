@@ -61,8 +61,8 @@ def synthesize_cluster(
 ) -> tuple[str | None, str | None, str | None, str]:
     """返回 (synthesized_text, synthesis_zh, synthesis_en, model_name)。
 
-    走模型时生成中/英两版(synthesized_text 取中文版, 兼容既有读取);
-    走规则时只有单版(zh/en 为 None, 无双语切换)。
+    纯 LLM:生成中/英两版(synthesized_text 取中文版, 兼容既有读取)。
+    无模型 / 调用失败 → 返回 (None, None, None, "none"),本簇不出稿,留待下轮。
     """
     rows = list(
         conn.execute(
@@ -110,23 +110,7 @@ def synthesize_cluster(
         except ModelError:
             pass
 
-    return synthesize_cluster_heuristic(rows, fact_packages, title), None, None, "heuristic-v1"
-
-
-def synthesize_cluster_heuristic(rows: list[sqlite3.Row], fact_packages: list[dict], title: str) -> str:
-    core = collect_unique_facts(fact_packages, "facts", limit=8)
-    numbers = collect_unique_strings(fact_packages, "numbers", limit=5)
-
-    parts = [f"# {title}", "", "## 核心事实", ""]
-    parts.extend(core or ["原文未提供足够可抽取的核心事实。"])
-    if numbers:
-        parts.extend(["", "## 关键数字", ""])
-        parts.extend(numbers)
-    parts.extend(["", "## 分歧与不确定", "", "当前启发式合成器不会自动判断来源分歧；需要后续接入模型增强。"])
-    parts.extend(["", "---", "", "## Sources", ""])
-    for row in rows:
-        parts.append(f"[{row['source_no']}] {row['source_name']} · {row['title']} · {row['url']}")
-    return "\n".join(parts).strip() + "\n"
+    return None, None, None, "none"  # 无模型 / 调用失败: 本簇不出稿
 
 
 _CITE = re.compile(r"\[(\d+)\]")
@@ -147,37 +131,3 @@ def ensure_sources(markdown: str, rows: list[sqlite3.Row]) -> str:
         if source_line not in text:
             text += f"\n{source_line}"
     return text.strip() + "\n"
-
-
-def collect_unique_facts(packages: list[dict], key: str, limit: int) -> list[str]:
-    seen: set[str] = set()
-    output: list[str] = []
-    for package in packages:
-        source_no = package["source_no"]
-        for item in package.get(key, []):
-            text = clean_text(item.get("text") if isinstance(item, dict) else str(item))
-            normalized = text.lower()
-            if not text or normalized in seen:
-                continue
-            seen.add(normalized)
-            output.append(f"{text} [{source_no}]")
-            if len(output) >= limit:
-                return output
-    return output
-
-
-def collect_unique_strings(packages: list[dict], key: str, limit: int) -> list[str]:
-    seen: set[str] = set()
-    output: list[str] = []
-    for package in packages:
-        source_no = package["source_no"]
-        for item in package.get(key, []):
-            text = clean_text(str(item))
-            normalized = text.lower()
-            if not text or normalized in seen:
-                continue
-            seen.add(normalized)
-            output.append(f"{text} [{source_no}]")
-            if len(output) >= limit:
-                return output
-    return output

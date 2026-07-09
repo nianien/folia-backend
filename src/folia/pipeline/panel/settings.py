@@ -96,18 +96,3 @@ def remove_directory(conn: sqlite3.Connection, name: str, parent: str = "") -> N
     if not parent:  # 删一级 → 连带删其全部二级
         conn.execute("DELETE FROM directory WHERE parent=?", (name,))
     conn.commit()
-
-
-def import_default_feeds(conn: sqlite3.Connection) -> int:
-    """把内置默认订阅(config.DEFAULT_FEEDS)并入 feed 表(已存在的跳过)。返回新增数。"""
-    from ..config import DEFAULT_FEEDS
-
-    added = 0
-    for url, name, description in DEFAULT_FEEDS:
-        cur = conn.execute(
-            "INSERT OR IGNORE INTO feed (url, name, description) VALUES (?,?,?)",
-            (url, name, description),
-        )
-        added += cur.rowcount
-    conn.commit()
-    return added

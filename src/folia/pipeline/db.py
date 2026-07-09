@@ -112,10 +112,10 @@ def connect(path: Path) -> sqlite3.Connection:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
+    """建表 + 迁移(幂等,数据无关)。初始数据由 scripts/init_db.py 一次性写入,不在这里播种。"""
     conn.executescript(SCHEMA)
     _migrate(conn)
     conn.commit()
-    seed_default_directories(conn)
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -145,35 +145,33 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("DROP TABLE directory_old")
 
 
-def seed_default_directories(conn: sqlite3.Connection) -> int:
-    """directory 表为空时播种默认两级分类(config.DEFAULT_DIRECTORIES)。"""
-    if conn.execute("SELECT COUNT(*) FROM directory").fetchone()[0]:
-        return 0
-    from .config import DEFAULT_DIRECTORIES
-
-    for name, parent, description, color, order in DEFAULT_DIRECTORIES:
-        conn.execute(
-            "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
-            "VALUES (?,?,?,?,?)",
-            (name, parent, description, color, order),
-        )
-    conn.commit()
-    return len(DEFAULT_DIRECTORIES)
+def insert_feed(conn: sqlite3.Connection, url: str, name: str, description: str) -> int:
+    """通用插入订阅源(已存在则跳过)。返回新增行数(1/0)。装机与其他写入方共用。"""
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO feed (url, name, description) VALUES (?,?,?)",
+        (url, name, description),
+    )
+    return cur.rowcount
 
 
-def seed_default_feeds(conn: sqlite3.Connection) -> int:
-    """feed 表为空时播种内置默认订阅(config.DEFAULT_FEEDS)。返回播种条数。"""
-    if conn.execute("SELECT COUNT(*) FROM feed").fetchone()[0]:
-        return 0
-    from .config import DEFAULT_FEEDS
+def insert_directory(
+    conn: sqlite3.Connection, name: str, parent: str, description: str, color: str, sort_order: int
+) -> int:
+    """通用插入分类(已存在则跳过)。返回新增行数(1/0)。"""
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO directory (name, parent, description, color, sort_order) "
+        "VALUES (?,?,?,?,?)",
+        (name, parent, description, color, sort_order),
+    )
+    return cur.rowcount
 
-    for url, name, description in DEFAULT_FEEDS:
-        conn.execute(
-            "INSERT OR IGNORE INTO feed (url, name, description) VALUES (?,?,?)",
-            (url, name, description),
-        )
-    conn.commit()
-    return len(DEFAULT_FEEDS)
+
+def insert_setting(conn: sqlite3.Connection, key: str, value: str) -> int:
+    """通用插入配置项(已存在则跳过,不覆盖用户已改的值)。返回新增行数(1/0)。"""
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)", (key, value)
+    )
+    return cur.rowcount
 
 
 def upsert_source(

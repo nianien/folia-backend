@@ -53,13 +53,10 @@ class PipelineRunner:
         init_db(conn)
         while not self._stop.is_set():
             settings = load_settings(conn)
-            if self._run_now or settings["loop"]["enabled"]:
-                self._run_now = False
-                self._run_cycle(conn, settings)
-                wait: float = max(5, int(settings["loop"]["interval"]))
-            else:
-                wait = 3.0  # 暂停时轻量轮询, 等被开启/立即跑
-            self._wake.wait(timeout=wait)
+            self._run_now = False
+            self._run_cycle(conn, settings)  # 每轮自检: 只处理未完成项, 幂等
+            wait: float = max(5, int(settings.get("loop", {}).get("interval", 1800)))
+            self._wake.wait(timeout=wait)  # 干完等下一轮(立即跑会提前唤醒)
             self._wake.clear()
 
     def _run_cycle(self, conn, settings: dict) -> None:

@@ -104,8 +104,11 @@ class ModelClient:
             ],
             "stream": False,
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_output_tokens,
         }
+        # OpenAI 新模型(gpt-5+/o 系列)废弃 max_tokens, 要 max_completion_tokens;
+        # 第三方 OpenAI 兼容端(deepseek/qwen/xinapi)仍用 max_tokens。
+        token_key = "max_completion_tokens" if self.config.provider == "openai" else "max_tokens"
+        payload[token_key] = self.config.max_output_tokens
         headers = {
             "Authorization": f"Bearer {self._require_key()}",
             "Content-Type": "application/json",
@@ -121,10 +124,10 @@ class ModelClient:
         payload = {
             "model": self.config.model,
             "max_tokens": self.config.max_output_tokens,
-            "temperature": self.config.temperature,
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}],
         }
+        # 不发 temperature: 新模型(claude-sonnet-5 等)已废弃该参数, 发了会 400。
         headers = {
             "x-api-key": self._require_key(),
             "anthropic-version": "2023-06-01",

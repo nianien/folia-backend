@@ -16,17 +16,11 @@
   <div class="card">
     <h3>抓取</h3>
     <div class="kv"><span class="k">状态</span>
-      {% if status.busy %}<span class="pill on"><span class="dot"></span>抓取中</span>
-      {% elif enabled %}<span class="pill on"><span class="dot"></span>循环运行中</span>
-      {% else %}<span class="pill off">已停止</span>{% endif %}</div>
+      {% if status.busy %}<span class="pill on"><span class="dot"></span>自检中</span>
+      {% else %}<span class="pill on"><span class="dot"></span>循环运行中（每轮自检，处理未完成项）</span>{% endif %}</div>
     <div class="kv"><span class="k">上次</span><span class="muted">{{ status.last_message }}{% if status.last_run %} · {{ status.last_run }}{% endif %}</span></div>
     <div class="row" style="margin-top:14px">
-      {% if enabled %}
-        <form method="post" action="/admin/loop/stop"><button class="danger">停止循环</button></form>
-      {% else %}
-        <form method="post" action="/admin/loop/start"><button>启动循环</button></form>
-      {% endif %}
-      <form method="post" action="/admin/loop/run"><button class="ghost">立即抓取一次</button></form>
+      <form method="post" action="/admin/loop/run"><button>立即跑一轮</button></form>
     </div>
     <form method="post" action="/admin/interval" class="subform">
       <label>抓取间隔（秒）</label>
@@ -68,8 +62,9 @@
         <input type="text" name="description" placeholder="描述（一句话介绍这个源）" style="flex:1;min-width:260px">
       </div>
     </form>
-    <form method="post" action="/admin/sources/import-seed" style="margin-top:10px">
-      <button class="ghost">导入默认订阅</button>
+    <form method="post" action="/admin/install" style="margin-top:10px">
+      <button class="ghost">一键初始化默认数据（订阅源 / 分类 / 配置）</button>
+      <span class="muted" style="margin-left:8px">幂等：只补缺失，已有配置不覆盖</span>
     </form>
   </div>
   <div class="card">
@@ -91,7 +86,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="muted">还没有订阅源。点「导入默认订阅」，或在上面添加一个 RSS 地址。</p>
+    <p class="muted">还没有订阅源。在上面添加一个 RSS 地址。</p>
     {% endif %}
   </div>
 </div>

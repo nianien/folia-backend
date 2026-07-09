@@ -34,6 +34,20 @@ def make_articles() -> list[FeedArticle]:
     ]
 
 
+class FakeModelClient:
+    """纯 LLM 设计后, facts/synthesis 都需要模型驱动(不再有规则兜底)。"""
+    enabled = True
+    model_name = "fake:test"
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        if system_prompt.startswith("你是新闻事实抽取器"):
+            return ('{"summary": "The central bank raised interest rates by 25 basis points '
+                    'on Tuesday, citing inflation.", "key_points": ["25 basis points", "Tuesday"]}')
+        return ("# Central bank raises interest rates\n\n"
+                "The central bank raised interest rates by 25 basis points on Tuesday, "
+                "citing inflation. [1][2]\n")
+
+
 class PipelineTest(unittest.TestCase):
     def test_articles_cluster_and_synthesize_with_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -53,8 +67,9 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(assign_pending_articles(conn, JACCARD_SETTINGS), 2)
             self.assertEqual(scalar(conn, "SELECT COUNT(*) FROM clusters"), 1)
 
-            self.assertEqual(facts_pending(conn), 2)
-            self.assertEqual(synthesize_pending(conn), 1)
+            client = FakeModelClient()
+            self.assertEqual(facts_pending(conn, client), 2)
+            self.assertEqual(synthesize_pending(conn, client), 1)
             text = scalar(conn, "SELECT synthesized_text FROM clusters LIMIT 1")
             self.assertIn("## Sources", text)
             self.assertIn("[1]", text)

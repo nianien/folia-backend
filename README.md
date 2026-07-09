@@ -33,8 +33,9 @@ Standard `src/` layout + `pyproject.toml`; dependencies are managed with
 [uv](https://astral.sh/uv) (`uv.lock` pins exact versions).
 
 ```bash
-uv sync                 # create .venv, install deps from uv.lock + the package (editable)
-uv run folia-pipeline panel --port 8000
+uv sync                          # create .venv, install deps from uv.lock + the package (editable)
+uv run python scripts/init_db.py # 一次性初始化 DB(建表 + 默认数据)
+uv run folia-pipeline start --port 8000
 ```
 
 `uv run <cmd>` runs inside the project venv. Prefix with `PYTHONPATH=src` only if
@@ -69,26 +70,17 @@ Supported providers: `openai`, `claude`, `gemini`, `deepseek`, `qwen`, `xinapi`,
 ## Commands
 
 ```bash
-folia-pipeline init-db
-folia-pipeline run-once            # poll → extract → categorize → cluster → facts → synthesize
-folia-pipeline extract-pending
-folia-pipeline categorize-pending
-folia-pipeline facts-pending
-folia-pipeline synthesize-pending
-folia-pipeline export --out data/frontpage.json
-folia-pipeline load --in data/frontpage.json      # push snapshot to Neon (uses database.url)
-folia-pipeline panel --port 8000
-folia-pipeline inspect-cluster 1
-folia-pipeline ingest-fixture tests/fixtures/sample_feed.xml
+python scripts/init_db.py          # 一次性初始化: 建表 + 写默认订阅/分类/配置(幂等)
+folia-pipeline start --port 8000   # 启动控制面板 + 自检循环(抓取/抽取/分类/聚类/事实/成稿, 每轮只处理未完成项)
 ```
 
-`ingest-fixture` treats a local feed file as one source and runs it through the
-poller + editorial layer offline (no network).
+`start` 是唯一命令:起 Web 控制台并常驻一个自检循环——每轮把各阶段的未完成项处理掉、干完等下一轮
+(间隔在面板里改)。其余操作(数据源 / 分类 / 模型 / 云端同步 / 立即跑一轮 / 一键初始化)都在面板 `http://localhost:8000/admin` 里点。
 
 Without the console script:
 
 ```bash
-uv run python -m folia.pipeline.cli run-once
+uv run python -m folia.pipeline.cli start --port 8000
 ```
 
 ## Tests
