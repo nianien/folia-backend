@@ -2,6 +2,28 @@
 import { marked } from "marked";
 import { sql, layout, html, escape, timeago } from "../_shared.js";
 
+// 模块级配置一次。安全:markdown 里的链接/图片只允许 http(s), 挡 javascript:/data: 等危险 scheme。
+marked.setOptions({ breaks: false, gfm: true });
+marked.use({
+  walkTokens(t) {
+    if ((t.type === "link" || t.type === "image") && !/^https?:\/\//i.test(t.href || "")) {
+      t.href = "#";
+    }
+  },
+});
+
+function renderBody(md) {
+  if (!md) return '<p class="dek">尚未生成综述。</p>';
+  // synthesis_md 是 LLM 产出且公开渲染 → 先中和原始 HTML(< >),防 <script> 等注入;
+  // marked 再从 markdown 语法生成安全 HTML(标题/段落/引用等)。
+  const safe = md.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return marked.parse(safe);
+}
+
+function safeUrl(u) {
+  return /^https?:\/\//i.test(u || "") ? u : "#";
+}
+
 export async function onRequest(context) {
   const id = parseInt(context.params.id, 10);
   if (!Number.isInteger(id)) return html(layout("未找到", "<p>无效的 id</p>"), 404);
@@ -17,13 +39,12 @@ export async function onRequest(context) {
   const meta = [s.source_count > 1 ? `${s.source_count} 个来源` : "", timeago(s.published_at),
     s.synthesis_model ? `综述 ${s.synthesis_model}` : ""].filter(Boolean).join(" · ");
 
-  marked.setOptions({ breaks: false, gfm: true });
-  const bodyMd = s.synthesis_md ? marked.parse(s.synthesis_md) : '<p class="dek">尚未生成综述。</p>';
+  const bodyMd = renderBody(s.synthesis_md);
 
   const sources = Array.isArray(s.sources) ? s.sources : [];
   const srcHtml = sources.length
     ? `<div class="sources"><h3>来源</h3><ol>${sources.map((x) =>
-        `<li>${escape(x.source_name || "")} · <a href="${escape(x.url || "#")}" target="_blank" rel="noopener">${escape(x.title || x.url || "")}</a></li>`
+        `<li>${escape(x.source_name || "")} · <a href="${escape(safeUrl(x.url))}" target="_blank" rel="noopener">${escape(x.title || x.url || "")}</a></li>`
       ).join("")}</ol></div>`
     : "";
 
