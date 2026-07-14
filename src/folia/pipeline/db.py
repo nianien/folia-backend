@@ -8,8 +8,6 @@ from .text import content_hash, normalize_url, stable_id
 
 
 SCHEMA = """
-PRAGMA journal_mode=WAL;
-
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -108,7 +106,10 @@ def connect(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")  # 撞锁等 5s, 挡循环写 vs Web 写冲突
+    conn.execute("PRAGMA busy_timeout=10000")  # 撞锁等 10s(DELETE 模式下读写互斥, 靠等待化解)
+    # 用 DELETE 回滚日志而非 WAL: WAL 依赖 -shm 共享内存文件, 在 Docker bind-mount 的虚拟
+    # 文件系统上不可靠, 循环写 + 预览读并发会报 "disk I/O error"。DELETE 不需要 -shm, 稳。
+    conn.execute("PRAGMA journal_mode=DELETE")
     return conn
 
 

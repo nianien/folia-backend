@@ -1,0 +1,10 @@
+{
+  "name": "folia-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Folia 新闻 web 前端 (Cloudflare Pages Functions, 读 Neon)",
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "marked": "^14.1.3"
+  }
+}
