@@ -53,6 +53,8 @@ export function layout(title, bodyHtml) {
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escape(title)}</title>
+<link rel="icon" href="/img.png">
+<link rel="apple-touch-icon" href="/img.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;900&display=swap" rel="stylesheet">
 <style>${CSS}</style></head><body><div class="wrap">${bodyHtml}</div></body></html>`;
