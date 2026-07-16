@@ -30,7 +30,7 @@ export async function onRequest(context) {
 
   const db = sql(context.env);
   const rows = await db`SELECT story_id, title, category, category_label, synthesis_md,
-                               synthesis_model, published_at, source_count, sources
+                               synthesis_model, published_at, source_count, sources, tags
                         FROM stories WHERE story_id = ${id} AND active LIMIT 1`;
   if (!rows.length) return html(layout("未找到", '<a class="back" href="/">← 返回头版</a><p>该新闻不存在或已下线。</p>'), 404);
 
@@ -40,6 +40,11 @@ export async function onRequest(context) {
     s.synthesis_model ? `综述 ${s.synthesis_model}` : ""].filter(Boolean).join(" · ");
 
   const bodyMd = renderBody(s.synthesis_md);
+
+  const tags = Array.isArray(s.tags) ? s.tags : [];
+  const tagsHtml = tags.length
+    ? `<div class="tags">${tags.map((t) => `<span>${escape(t)}</span>`).join("")}</div>`
+    : "";
 
   const sources = Array.isArray(s.sources) ? s.sources : [];
   const srcHtml = sources.length
@@ -53,6 +58,7 @@ export async function onRequest(context) {
     <h1>${escape(s.title)}</h1>
     <div class="meta">${escape(meta)}</div>
     <div class="body">${bodyMd}</div>
+    ${tagsHtml}
     ${srcHtml}</article>`;
   return html(layout(s.title || "新闻", body));
 }

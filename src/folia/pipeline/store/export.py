@@ -15,6 +15,7 @@ from ..viewer import (
     CITE_RE,
     cat_meta,
     cluster_image,
+    cluster_tags,
     first_image,
 )
 
@@ -60,6 +61,7 @@ def export_frontpage(conn: sqlite3.Connection) -> dict:
                 "synthesis_model": row["synthesis_model"] or "",
                 "search_text": f"{title}\n{plain}",
                 "sources": sources,
+                "tags": cluster_tags(conn, row["id"]),
             }
         )
 
