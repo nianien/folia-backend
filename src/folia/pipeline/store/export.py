@@ -26,7 +26,7 @@ _HEADING_RE = re.compile(r"^#{1,6}\s+")
 def export_frontpage(conn: sqlite3.Connection) -> dict:
     rows = conn.execute(
         """
-        SELECT c.id, c.title, c.source_count, c.synthesized_text, c.updated_at,
+        SELECT c.id, c.title, c.source_count, c.synthesized_text, c.synthesis_en, c.updated_at,
                c.synthesis_model,
                a.category AS category, a.source_tier AS tier,
                a.published_at AS published_at
@@ -42,6 +42,7 @@ def export_frontpage(conn: sqlite3.Connection) -> dict:
         title = (row["title"] or "").strip()
         synth = row["synthesized_text"] or ""
         body_md = clean_markdown(synth)
+        body_en = clean_markdown(row["synthesis_en"] or "")
         plain = markdown_to_plain(body_md)
         category = row["category"] or "uncategorized"
         label, _ = cat_meta(category)
@@ -58,6 +59,7 @@ def export_frontpage(conn: sqlite3.Connection) -> dict:
                 "published_at": row["published_at"] or row["updated_at"] or "",
                 "source_count": row["source_count"] or 1,
                 "synthesis_md": body_md,
+                "synthesis_en": body_en,
                 "synthesis_model": row["synthesis_model"] or "",
                 "search_text": f"{title}\n{plain}",
                 "sources": sources,

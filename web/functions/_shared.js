@@ -37,6 +37,9 @@ article.read .meta{color:var(--muted);font-size:13px;margin-bottom:22px}
 .body{font-size:17px}
 .body h1,.body h2{font-family:inherit}
 .body h2{font-size:20px;margin:26px 0 10px;border-left:3px solid var(--cat);padding-left:10px}
+.langbar{display:flex;gap:6px;margin:0 0 16px}
+.langbtn{padding:3px 14px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;font:inherit;font-size:14px}
+.langbtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 .tags{margin:22px 0}
 .tags span{display:inline-block;padding:2px 11px;margin:0 6px 6px 0;border:1px solid var(--cat);
   border-radius:999px;font-size:13px;color:var(--cat);opacity:.85}

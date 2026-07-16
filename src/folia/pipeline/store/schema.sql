@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS stories (
     published_at    timestamptz,
     source_count    integer NOT NULL DEFAULT 1,
     synthesis_md    text,
+    synthesis_en    text,
     synthesis_model text,
     search_text     text NOT NULL DEFAULT '',
     sources         jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS stories (
 
 -- 兼容已建的旧表(CREATE TABLE IF NOT EXISTS 不会给旧表补列)
 ALTER TABLE stories ADD COLUMN IF NOT EXISTS tags jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS synthesis_en text;
 
 CREATE INDEX IF NOT EXISTS stories_search_trgm
     ON stories USING gin (search_text gin_trgm_ops);

@@ -20,12 +20,12 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 UPSERT = """
 INSERT INTO stories (
     story_id, title, category, category_label, tier, dek, image_url,
-    published_at, source_count, synthesis_md, synthesis_model, search_text,
+    published_at, source_count, synthesis_md, synthesis_en, synthesis_model, search_text,
     sources, tags, active, updated_at
 ) VALUES (
     %(id)s, %(title)s, %(category)s, %(category_label)s, %(tier)s,
     %(dek)s, %(image_url)s, %(published_at)s, %(source_count)s, %(synthesis_md)s,
-    %(synthesis_model)s, %(search_text)s, %(sources)s, %(tags)s, true, now()
+    %(synthesis_en)s, %(synthesis_model)s, %(search_text)s, %(sources)s, %(tags)s, true, now()
 )
 ON CONFLICT (story_id) DO UPDATE SET
     title           = EXCLUDED.title,
@@ -37,6 +37,7 @@ ON CONFLICT (story_id) DO UPDATE SET
     published_at    = EXCLUDED.published_at,
     source_count    = EXCLUDED.source_count,
     synthesis_md    = EXCLUDED.synthesis_md,
+    synthesis_en    = EXCLUDED.synthesis_en,
     synthesis_model = EXCLUDED.synthesis_model,
     search_text     = EXCLUDED.search_text,
     sources         = EXCLUDED.sources,
@@ -77,6 +78,7 @@ def to_params(story: dict) -> dict:
         "published_at": story.get("published_at") or None,
         "source_count": story.get("source_count") or 1,
         "synthesis_md": story.get("synthesis_md"),
+        "synthesis_en": story.get("synthesis_en"),
         "synthesis_model": story.get("synthesis_model"),
         "search_text": story.get("search_text") or "",
         "sources": Jsonb(story.get("sources") or []),

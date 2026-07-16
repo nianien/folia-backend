@@ -61,7 +61,12 @@ def analyze_user_prompt(article: dict, tree) -> str:
 
 SYNTHESIS_LANG_DIRECTIVE = {
     "zh": "整篇正文用简体中文输出。",
-    "en": "Write the entire article in English.",
+    "en": (
+        "Write the ENTIRE article in fluent English, no matter what language the fact "
+        "packages are in. Translate every fact, name, number, and quote into English. "
+        "The output must contain NO Chinese characters at all — title, body, and headings "
+        "all in English."
+    ),
 }
 
 

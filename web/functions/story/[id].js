@@ -30,7 +30,7 @@ export async function onRequest(context) {
 
   const db = sql(context.env);
   const rows = await db`SELECT story_id, title, category, category_label, synthesis_md,
-                               synthesis_model, published_at, source_count, sources, tags
+                               synthesis_en, synthesis_model, published_at, source_count, sources, tags
                         FROM stories WHERE story_id = ${id} AND active LIMIT 1`;
   if (!rows.length) return html(layout("未找到", '<a class="back" href="/">← 返回头版</a><p>该新闻不存在或已下线。</p>'), 404);
 
@@ -39,7 +39,25 @@ export async function onRequest(context) {
   const meta = [s.source_count > 1 ? `${s.source_count} 个来源` : "", timeago(s.published_at),
     s.synthesis_model ? `综述 ${s.synthesis_model}` : ""].filter(Boolean).join(" · ");
 
-  const bodyMd = renderBody(s.synthesis_md);
+  // 中英双语:两版都有则给切换,只有一版则直接显示。
+  const zh = s.synthesis_md;
+  const en = s.synthesis_en;
+  let bodyHtml;
+  if (zh && en) {
+    bodyHtml =
+      `<div class="langbar">
+        <button type="button" class="langbtn on" data-l="zh" onclick="foliaLang('zh')">中文</button>
+        <button type="button" class="langbtn" data-l="en" onclick="foliaLang('en')">EN</button>
+      </div>
+      <div class="langbody" data-l="zh">${renderBody(zh)}</div>
+      <div class="langbody" data-l="en" style="display:none">${renderBody(en)}</div>
+      <script>function foliaLang(l){
+        document.querySelectorAll('.langbody').forEach(function(b){b.style.display=(b.dataset.l===l)?'':'none'});
+        document.querySelectorAll('.langbtn').forEach(function(x){x.classList.toggle('on',x.dataset.l===l)});
+      }</script>`;
+  } else {
+    bodyHtml = renderBody(zh || en);
+  }
 
   const tags = Array.isArray(s.tags) ? s.tags : [];
   const tagsHtml = tags.length
@@ -57,7 +75,7 @@ export async function onRequest(context) {
     <article class="read"><div class="kick">${escape(label)}</div>
     <h1>${escape(s.title)}</h1>
     <div class="meta">${escape(meta)}</div>
-    <div class="body">${bodyMd}</div>
+    <div class="body">${bodyHtml}</div>
     ${tagsHtml}
     ${srcHtml}</article>`;
   return html(layout(s.title || "新闻", body));
